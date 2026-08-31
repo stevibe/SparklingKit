@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { ArrowLeftRight, ArrowRight, AudioLines, CloudUpload, ExternalLink, FileText, FolderOpen, Image as ImageIcon, Languages, MessageCircle, ScanSearch, ScanText, X } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, AudioLines, CloudUpload, ExternalLink, FileText, FolderOpen, Image as ImageIcon, Languages, MessageCircle, ScanSearch, ScanText, Search, X } from "lucide-react";
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, uploadGroundingJob, uploadJob } from "../api";
 import { cn, JobIcon, StatusBadge, timeAgo } from "../components/ui";
 import { moduleWorkflowForArtifact } from "../../shared/module-router";
 import { savedTranslationPreferences, translationLanguages, translationPreferenceKey } from "../translation";
 import type { Job, JobKind, ModuleDescriptor, ModuleId } from "../types";
+import { useGlobalSearch } from "../components/GlobalSearch";
 
 export { translationLanguages } from "../translation";
 
@@ -374,8 +375,9 @@ export function ModulePage() {
 }
 
 function ModuleHistory({ module, jobs }: { module: ModuleDescriptor; jobs: Job[] }) {
+  const { openSearch } = useGlobalSearch();
   return <aside className="module-history">
-    <header><h2>{moduleHistoryTitles[module.id]}</h2><small>{jobs.length}</small></header>
+    <header><h2>{moduleHistoryTitles[module.id]}</h2><div className="module-history-actions"><small>{jobs.length}</small><button className="list-search-button" onClick={() => openSearch({ scope: module.id === "chat" ? "chats" : "work", moduleId: module.id, title: `Search ${moduleHistoryTitles[module.id].toLocaleLowerCase()}` })} aria-label={`Search ${moduleHistoryTitles[module.id]}`} title={`Search ${moduleHistoryTitles[module.id]}`}><Search size={17} /></button></div></header>
     <div className="module-history-list">{jobs.slice(0, 12).map((job) => {
       const image = job.outputFiles.find((file) => /\.(?:png|jpe?g|webp|gif|avif|svg)$/i.test(file));
       return <Link to={`/jobs/${job.id}`} className="module-history-item" key={job.id}>

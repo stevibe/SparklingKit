@@ -206,3 +206,26 @@ export interface EndpointHealth {
   availableModels: string[];
   error?: string;
 }
+
+export const SEARCH_SCOPES = ["all", "work", "chats", "tools"] as const;
+export type SearchScope = (typeof SEARCH_SCOPES)[number];
+export type SearchResultType = "job" | "artifact" | "conversation" | "module";
+
+export interface SearchResult {
+  id: string;
+  type: SearchResultType;
+  group: "work" | "conversations" | "tools";
+  title: string;
+  subtitle: string;
+  url: string;
+  updatedAt?: string;
+  moduleId?: ModuleId;
+  artifactKind?: ArtifactKind;
+}
+
+export interface SearchResponse {
+  query: string;
+  scope: SearchScope;
+  results: SearchResult[];
+  total: number;
+}

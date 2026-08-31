@@ -11,6 +11,10 @@ import type {
   ModuleId,
   ModelInputCapability,
   PromptPreset,
+  SearchResponse,
+  SearchResult,
+  SearchResultType,
+  SearchScope,
   Settings,
   WorkflowRun,
 } from "../shared/contracts";
@@ -26,6 +30,10 @@ export type {
   ModuleId,
   ModelInputCapability,
   PromptPreset,
+  SearchResponse,
+  SearchResult,
+  SearchResultType,
+  SearchScope,
   Settings,
   WorkflowRun,
 };

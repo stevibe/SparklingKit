@@ -1,4 +1,4 @@
-import type { Chat, EndpointConfig, EndpointHealth, EndpointKind, Health, Job, ModuleDescriptor, ModuleId, PromptPreset, Settings, WorkflowRun } from "./types";
+import type { Chat, EndpointConfig, EndpointHealth, EndpointKind, Health, Job, ModuleDescriptor, ModuleId, PromptPreset, SearchResponse, SearchScope, Settings, WorkflowRun } from "./types";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -24,6 +24,11 @@ export const api = {
   settings: () => request<Settings>("/api/settings"),
   saveSettings: (settings: Settings) => request<Settings>("/api/settings", { method: "PUT", body: JSON.stringify(settings) }),
   modules: () => request<ModuleDescriptor[]>("/api/modules"),
+  search: (query: string, scope: SearchScope = "all", moduleId?: ModuleId, signal?: AbortSignal) => {
+    const params = new URLSearchParams({ q: query, scope });
+    if (moduleId) params.set("moduleId", moduleId);
+    return request<SearchResponse>(`/api/search?${params}`, { signal });
+  },
   previewTranslation: (text: string, sourceLanguage: string, targetLanguage: string, signal?: AbortSignal) => request<{ text: string }>("/api/modules/translation/preview", { method: "POST", body: JSON.stringify({ text, sourceLanguage, targetLanguage }), signal }),
   createTextTranslationJob: (text: string, sourceLanguage: string, targetLanguage: string) => request<Job>("/api/modules/translation/text", { method: "POST", body: JSON.stringify({ text, sourceLanguage, targetLanguage }) }),
   createImageJob: (prompt: string, size: string) => request<Job>("/api/modules/text-to-image/jobs", { method: "POST", body: JSON.stringify({ prompt, size }) }),

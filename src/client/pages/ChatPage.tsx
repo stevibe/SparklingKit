@@ -4,10 +4,11 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
-import { ArrowUp, Bot, ChevronLeft, MessageCircle, Pencil, Plus, Square, Trash2, UserRound } from "lucide-react";
+import { ArrowUp, Bot, ChevronLeft, MessageCircle, Pencil, Plus, Search, Square, Trash2, UserRound } from "lucide-react";
 import { api, streamChat } from "../api";
 import { cn, ConfirmDialog, RenameDialog, timeAgo } from "../components/ui";
 import type { Chat, ChatMessage } from "../types";
+import { useGlobalSearch } from "../components/GlobalSearch";
 
 const markdownComponents: Components = {
   a: ({ node: _node, href, ...props }) => {
@@ -44,6 +45,7 @@ export function ChatPage() {
   const initialPromptSent = useRef("");
   const navigate = useNavigate();
   const location = useLocation();
+  const { openSearch } = useGlobalSearch();
   const initialPrompt = ((location.state as { initialPrompt?: string } | null)?.initialPrompt || "").trim();
 
   useEffect(() => { api.chats().then(setChats).catch(() => undefined); }, [id, streaming]);
@@ -166,7 +168,7 @@ export function ChatPage() {
   return (
     <div className="chat-layout">
       <aside className={cn("chat-list", id && "hidden lg:flex")}>
-        <div className="flex items-center justify-between px-1"><div><p className="eyebrow">CONVERSATIONS</p><h1 className="mt-1 text-xl font-semibold">Chat</h1></div><button className="icon-button bg-white" onClick={newChat} aria-label="New chat"><Plus size={18} /></button></div>
+        <div className="flex items-center justify-between px-1"><div><p className="eyebrow">CONVERSATIONS</p><h1 className="mt-1 text-xl font-semibold">Chat</h1></div><div className="chat-list-actions"><button className="list-search-button" onClick={() => openSearch({ scope: "chats" })} aria-label="Search conversations" title="Search conversations"><Search size={17} /></button><button className="icon-button bg-white" onClick={newChat} aria-label="New chat"><Plus size={18} /></button></div></div>
         <div className="mt-6 space-y-1.5 overflow-y-auto">
           {chats.map((item) => <Link key={item.id} to={`/chat/${item.id}`} className={cn("chat-list-item", item.id === id && "chat-list-item-active")}><MessageCircle size={16} /><div className="min-w-0"><p className="truncate text-sm font-medium">{item.title}</p><p className="mt-0.5 text-[14px] text-muted">{timeAgo(item.updatedAt)}</p></div></Link>)}
           {!chats.length && <p className="px-3 py-8 text-center text-sm text-muted">No conversations yet.</p>}

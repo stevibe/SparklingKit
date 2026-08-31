@@ -1,8 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { AudioLines, BrainCircuit, Image as ImageIcon, LayoutGrid, Languages, MessageCircle, PanelLeftClose, PanelLeftOpen, ScanSearch, ScanText, Settings } from "lucide-react";
+import { AudioLines, BrainCircuit, Image as ImageIcon, LayoutGrid, Languages, MessageCircle, PanelLeftClose, PanelLeftOpen, ScanSearch, ScanText, Search, Settings } from "lucide-react";
 import { api } from "../api";
 import type { Health, ModuleDescriptor } from "../types";
+import { useGlobalSearch } from "./GlobalSearch";
 
 const moduleIcons = { "scan-text": ScanText, "audio-lines": AudioLines, languages: Languages, "scan-search": ScanSearch, image: ImageIcon, "message-circle": MessageCircle };
 const mobileNav = [
@@ -29,6 +30,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     try { return window.localStorage.getItem(sidebarPreferenceKey) === "true"; } catch { return false; }
   });
   const location = useLocation();
+  const { openSearch } = useGlobalSearch();
 
   useEffect(() => {
     let active = true;
@@ -58,6 +60,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link to="/" className="brand-wordmark" aria-label="SparklingKit home">SparklingKit</Link>
           <button type="button" className="sidebar-collapse-button" onClick={toggleSidebar} aria-controls="app-sidebar" aria-expanded={!sidebarCollapsed} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>{sidebarCollapsed ? <PanelLeftOpen size={19} /> : <PanelLeftClose size={19} />}</button>
         </div>
+        <button type="button" className="sidebar-search-button" onClick={() => openSearch()} title="Search SparklingKit (⌘K)" aria-label="Search SparklingKit"><Search size={18} /><span>Search</span><kbd>⌘K</kbd></button>
         <p className="nav-label">Workspace</p>
         <nav>
           <NavLink to="/" end title="Workbench" aria-label="Workbench" className={({ isActive }) => `nav-link ${isActive ? "nav-link-active" : ""}`}><LayoutGrid size={19} strokeWidth={1.8} /><span>Workbench</span></NavLink>
@@ -89,7 +92,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
       <main className="main-content">{children}</main>
       <nav className="mobile-tabbar" aria-label="Primary navigation">
-        {mobileNav.map(({ to, label, icon: Icon, exact }) => <NavLink key={to} to={to} state={to === "/settings" ? { backgroundLocation: location } : undefined} end={exact} className={({ isActive }) => isActive ? "active" : ""}><Icon size={20} strokeWidth={1.9} /><span>{label}</span></NavLink>)}
+        {mobileNav.slice(0, 2).map(({ to, label, icon: Icon, exact }) => <NavLink key={to} to={to} end={exact} className={({ isActive }) => isActive ? "active" : ""}><Icon size={20} strokeWidth={1.9} /><span>{label}</span></NavLink>)}
+        <button type="button" onClick={() => openSearch()} aria-label="Search"><Search size={20} strokeWidth={1.9} /><span>Search</span></button>
+        {mobileNav.slice(2).map(({ to, label, icon: Icon, exact }) => <NavLink key={to} to={to} state={to === "/settings" ? { backgroundLocation: location } : undefined} end={exact} className={({ isActive }) => isActive ? "active" : ""}><Icon size={20} strokeWidth={1.9} /><span>{label}</span></NavLink>)}
       </nav>
     </div>
   );

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ArrowLeft, ArrowRight, Braces, Check, ChevronDown, Code2, Copy, Download, ExternalLink, File, FileAudio, FileJson, FileText, FileVideo, FolderOpen, Image as ImageIcon, Languages, LoaderCircle, MessageCircle, PanelLeft, Pencil, ScanSearch, ScanText, Square, Subtitles, Trash2, TriangleAlert } from "lucide-react";
@@ -41,6 +41,8 @@ export function JobPage() {
   const [stopping, setStopping] = useState(false);
   const [openingChat, setOpeningChat] = useState(false);
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedArtifactId = searchParams.get("artifact") || "";
 
   useEffect(() => {
     api.job(id).then(setJob).catch((value) => setError(value.message));
@@ -54,12 +56,23 @@ export function JobPage() {
   const outputFiles = useMemo(() => job?.outputFiles || [], [job?.outputFiles]);
   useEffect(() => {
     if (!job) return;
+    const requestedArtifact = requestedArtifactId ? job.artifacts.find((artifact) => artifact.id === requestedArtifactId) : undefined;
+    if (requestedArtifact?.path.startsWith("output/")) {
+      setSelectedScope("output");
+      setSelectedFile(requestedArtifact.path.slice("output/".length));
+      return;
+    }
+    if (requestedArtifact?.path.startsWith("input/")) {
+      setSelectedScope("input");
+      setSelectedFile(requestedArtifact.path.slice("input/".length));
+      return;
+    }
     const selectionExists = selectedScope === "output" ? outputFiles.includes(selectedFile) : job.inputs.some((input) => input.storedName === selectedFile);
     if (selectionExists) return;
     if (outputFiles.length) { setSelectedScope("output"); setSelectedFile(outputFiles[0]); }
     else if (job.inputs.length) { setSelectedScope("input"); setSelectedFile(job.inputs[0].storedName); }
     else setSelectedFile("");
-  }, [job?.inputs.map((input) => input.storedName).join("|"), outputFiles.join("|"), selectedFile, selectedScope]);
+  }, [job?.inputs.map((input) => input.storedName).join("|"), outputFiles.join("|"), requestedArtifactId]);
   useEffect(() => {
     if (!selectedFile) return;
     let active = true;
@@ -139,6 +152,15 @@ export function JobPage() {
     setDeleteError("");
     setDeleteTarget(target);
   }
+  function selectWorkspaceFile(scope: "output" | "input", file: string) {
+    setSelectedScope(scope);
+    setSelectedFile(file);
+    if (requestedArtifactId) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("artifact");
+      setSearchParams(next, { replace: true });
+    }
+  }
   function askToRename(target: RenameTarget) {
     setRenameError("");
     setRenameTarget(target);
@@ -198,7 +220,7 @@ export function JobPage() {
     : <>“{deleteTarget?.label}” will be permanently deleted from this job.</>;
   const renameDialogTitle = renameTarget?.kind === "job" ? "Rename job" : renameTarget?.kind === "input" ? "Rename source file" : "Rename output file";
   const renamedExtension = renameTarget && renameTarget.kind !== "job" ? renameTarget.value.match(/\.[^.]+$/)?.[0] : undefined;
-  const sourceFileRows = job.inputs.map((input) => <div className="source-file-row" key={input.storedName}><button className={cn("source-file", selectedScope === "input" && selectedFile === input.storedName && "active")} onClick={() => { setSelectedScope("input"); setSelectedFile(input.storedName); }}><FileTypeIcon file={input.name} /><span><strong>{input.name}</strong><small>{formatBytes(input.size)} · Source</small></span></button><span className="file-row-actions"><button className="row-rename-button" onClick={() => askToRename({ kind: "input", file: input.storedName, value: input.name })} disabled={running} aria-label={"Rename " + input.name} title={running ? "Files cannot be renamed while processing" : "Rename source file"}><Pencil size={13} /></button><button className="row-delete-button" onClick={() => askToDelete({ kind: "input", file: input.storedName, label: input.name })} disabled={running} aria-label={"Delete " + input.name} title={running ? "Files cannot be deleted while processing" : "Delete source file"}><Trash2 size={14} /></button></span></div>);
+  const sourceFileRows = job.inputs.map((input) => <div className="source-file-row" key={input.storedName}><button className={cn("source-file", selectedScope === "input" && selectedFile === input.storedName && "active")} onClick={() => selectWorkspaceFile("input", input.storedName)}><FileTypeIcon file={input.name} /><span><strong>{input.name}</strong><small>{formatBytes(input.size)} · Source</small></span></button><span className="file-row-actions"><button className="row-rename-button" onClick={() => askToRename({ kind: "input", file: input.storedName, value: input.name })} disabled={running} aria-label={"Rename " + input.name} title={running ? "Files cannot be renamed while processing" : "Rename source file"}><Pencil size={13} /></button><button className="row-delete-button" onClick={() => askToDelete({ kind: "input", file: input.storedName, label: input.name })} disabled={running} aria-label={"Delete " + input.name} title={running ? "Files cannot be deleted while processing" : "Delete source file"}><Trash2 size={14} /></button></span></div>);
 
   return <div className="job-page">
     <header className="job-titlebar">
@@ -215,7 +237,7 @@ export function JobPage() {
         <div className="file-sidebar-title"><span><PanelLeft size={18} />Files</span><small>{outputFiles.length + job.inputs.length}</small></div>
         <div className="file-tree">
           <p className="file-group-label">Generated output</p>
-          <div className="output-files-list">{outputFiles.map((file) => <div className={cn("file-tree-row", file.includes("/") && "nested")} key={file}><button className={cn("file-tree-item", selectedScope === "output" && selectedFile === file && "active")} onClick={() => { setSelectedScope("output"); setSelectedFile(file); }}><FileTypeIcon file={file} /><span><strong>{displayOutputName(file)}</strong><small>{describeOutput(file)}</small></span></button><button className="row-delete-button" onClick={() => askToDelete({ kind: "output", file, label: displayOutputName(file) })} disabled={running} aria-label={"Delete " + displayOutputName(file)} title={running ? "Files cannot be deleted while processing" : "Delete output file"}><Trash2 size={14} /></button></div>)}</div>
+          <div className="output-files-list">{outputFiles.map((file) => <div className={cn("file-tree-row", file.includes("/") && "nested")} key={file}><button className={cn("file-tree-item", selectedScope === "output" && selectedFile === file && "active")} onClick={() => selectWorkspaceFile("output", file)}><FileTypeIcon file={file} /><span><strong>{displayOutputName(file)}</strong><small>{describeOutput(file)}</small></span></button><button className="row-delete-button" onClick={() => askToDelete({ kind: "output", file, label: displayOutputName(file) })} disabled={running} aria-label={"Delete " + displayOutputName(file)} title={running ? "Files cannot be deleted while processing" : "Delete output file"}><Trash2 size={14} /></button></div>)}</div>
           {!outputFiles.length && <div className="file-tree-empty"><FolderOpen size={22} /><span>Outputs will appear here</span></div>}
           <div className="source-files-desktop"><div className="file-tree-divider" /><p className="file-group-label">Source files</p>{sourceFileRows}</div>
           <details className="mobile-source-files"><summary><span><File size={16} />Source files</span><small>{job.inputs.length}</small><ChevronDown size={16} /></summary><div>{sourceFileRows}</div></details>

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useDropzone } from "react-dropzone";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeftRight, ArrowRight, AudioLines, CloudUpload, FileText, FolderOpen, Image as ImageIcon, Languages, MessageCircle, Save, ScanSearch, ScanText, Trash2, X } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, AudioLines, CloudUpload, FileText, FolderOpen, Image as ImageIcon, Languages, MessageCircle, Save, ScanSearch, ScanText, Search, Trash2, X } from "lucide-react";
 import { api, uploadJob, uploadTranslationJob } from "../api";
 import { cn, ConfirmDialog, formatBytes, JobIcon, Progress, StatusBadge, timeAgo } from "../components/ui";
 import { savedTranslationPreferences, translationLanguages, translationPreferenceKey, type TranslationPreferences } from "../translation";
 import type { Job, JobKind, ModuleDescriptor, ModuleId } from "../types";
+import { useGlobalSearch } from "../components/GlobalSearch";
 
 const workflowCopy: Record<JobKind, { label: string; description: string }> = {
   audio: { label: "Transcription", description: "Audio or video to transcript and subtitles" },
@@ -110,6 +111,7 @@ export function Dashboard() {
   const [deleteError, setDeleteError] = useState("");
   const translationPreviewController = useRef<AbortController | undefined>(undefined);
   const navigate = useNavigate();
+  const { openSearch } = useGlobalSearch();
 
   useEffect(() => {
     let active = true;
@@ -320,7 +322,7 @@ export function Dashboard() {
     </section>
 
     <section className="recent-section dashboard-recent">
-      <header className="dashboard-column-heading"><h2>Recent</h2></header>
+      <header className="dashboard-column-heading"><h2>Recent</h2><button className="list-search-button" onClick={() => openSearch({ scope: "work", title: "Search work" })} aria-label="Search recent work" title="Search work"><Search size={18} /></button></header>
       <div className="work-tabs" role="tablist" aria-label="Filter recent work">
         {recentTabs.map((tab) => <button key={tab.key} role="tab" aria-selected={filter === tab.key} className={filter === tab.key ? "active" : ""} onClick={() => setFilter(tab.key)} aria-label={tab.label}>{tab.icon}<span className="tab-label-desktop">{tab.label}</span><span className="tab-label-mobile">{tab.shortLabel}</span></button>)}
       </div>

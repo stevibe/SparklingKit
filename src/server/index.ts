@@ -5,7 +5,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import cors from "cors";
 import multer from "multer";
 import { z } from "zod";
-import { ENDPOINT_KINDS, MODEL_INPUT_CAPABILITIES, MODULE_IDS } from "../shared/contracts.js";
+import { ENDPOINT_KINDS, MODEL_INPUT_CAPABILITIES, MODULE_IDS, SEARCH_SCOPES } from "../shared/contracts.js";
 import { getModuleContract, moduleAcceptsArtifact, moduleWorkflowForArtifact } from "../shared/module-router.js";
 import { checkEndpoint, openChatStream } from "./ai.js";
 import { modelMessagesForChat } from "./chat-messages.js";
@@ -14,6 +14,7 @@ import { jobEvents, publishJob } from "./events.js";
 import type { ChatMessage, EndpointKind, JobKind, PromptPreset, Settings } from "./models.js";
 import { listModules } from "./modules/registry.js";
 import { translateContent } from "./modules/translation/service.js";
+import { searchWorkspace } from "./search.js";
 import { closeQueue, enqueueJob, enqueuePreset, enqueueWorkflowRun, pingRedis, startWorker, stopJobWork, stopRunWork } from "./queue.js";
 import {
   createChat,
@@ -121,6 +122,12 @@ const textTranslationSchema = z.object({
 const translationPreviewSchema = textTranslationSchema.extend({ text: z.string().trim().min(1).max(50_000) });
 const fileTranslationSchema = textTranslationSchema.omit({ text: true });
 const translationFileExtensions = new Set([".txt", ".md", ".markdown", ".html", ".htm"]);
+const searchQuerySchema = z.object({
+  q: z.string().max(200).default(""),
+  scope: z.enum(SEARCH_SCOPES).default("all"),
+  moduleId: z.enum(MODULE_IDS).optional(),
+  limit: z.coerce.number().int().min(1).max(60).default(30),
+});
 
 app.get("/api/health", async (_request, response) => {
   const settings = await readSettings();
@@ -149,6 +156,10 @@ app.put("/api/settings", async (request, response) => {
 });
 
 app.get("/api/modules", async (_request, response) => response.json(listModules(await readSettings())));
+app.get("/api/search", async (request, response) => {
+  const input = searchQuerySchema.parse(request.query);
+  response.json(await searchWorkspace(input.q, input));
+});
 app.post("/api/modules/translation/preview", async (request, response) => {
   const input = translationPreviewSchema.parse(request.body);
   const settings = await readSettings();
