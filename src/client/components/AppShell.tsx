@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { AudioLines, BrainCircuit, Image as ImageIcon, LayoutGrid, Languages, MessageCircle, ScanSearch, ScanText, Settings } from "lucide-react";
+import { AudioLines, BrainCircuit, Image as ImageIcon, LayoutGrid, Languages, MessageCircle, PanelLeftClose, PanelLeftOpen, ScanSearch, ScanText, Settings } from "lucide-react";
 import { api } from "../api";
 import type { Health, ModuleDescriptor } from "../types";
 
@@ -20,10 +20,14 @@ const services = [
   { kind: "grounding" as const, label: "Grounding", fallback: "Not configured", icon: ScanSearch },
   { kind: "image-generation" as const, label: "Image", fallback: "Not configured", icon: ImageIcon },
 ];
+const sidebarPreferenceKey = "sparklingkit:sidebar-collapsed";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [health, setHealth] = useState<Health>();
   const [modules, setModules] = useState<ModuleDescriptor[]>([]);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return window.localStorage.getItem(sidebarPreferenceKey) === "true"; } catch { return false; }
+  });
   const location = useLocation();
 
   useEffect(() => {
@@ -38,23 +42,31 @@ export function AppShell({ children }: { children: ReactNode }) {
   const healthy = enabled.filter((item) => item.ok).length;
   const serviceSummary = health ? `${healthy}/${enabled.length} online` : "Checking";
   const activeChat = location.pathname.startsWith("/chat/");
+  const toggleSidebar = () => {
+    const next = !sidebarCollapsed;
+    setSidebarCollapsed(next);
+    try { window.localStorage.setItem(sidebarPreferenceKey, String(next)); } catch { /* Storage can be unavailable in private contexts. */ }
+  };
   return (
-    <div className={`app-shell min-h-screen bg-canvas text-ink ${activeChat ? "active-chat-shell" : ""}`}>
+    <div className={`app-shell min-h-screen bg-canvas text-ink ${activeChat ? "active-chat-shell" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <header className="mobile-header">
         <Link to="/" className="brand-wordmark" aria-label="SparklingKit home">SparklingKit</Link>
         <Link to="/settings" state={{ backgroundLocation: location }} className="mobile-service-chip" aria-label={`Open settings, ${serviceSummary}`}><i className={enabled.length > 0 && healthy === enabled.length ? "online" : ""} />{serviceSummary}</Link>
       </header>
-      <aside className="sidebar">
-        <Link to="/" className="brand-wordmark mb-9" aria-label="SparklingKit home">SparklingKit</Link>
+      <aside className="sidebar" id="app-sidebar">
+        <div className="sidebar-brand-row">
+          <Link to="/" className="brand-wordmark" aria-label="SparklingKit home">SparklingKit</Link>
+          <button type="button" className="sidebar-collapse-button" onClick={toggleSidebar} aria-controls="app-sidebar" aria-expanded={!sidebarCollapsed} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>{sidebarCollapsed ? <PanelLeftOpen size={19} /> : <PanelLeftClose size={19} />}</button>
+        </div>
         <p className="nav-label">Workspace</p>
         <nav>
-          <NavLink to="/" end className={({ isActive }) => `nav-link ${isActive ? "nav-link-active" : ""}`}><LayoutGrid size={19} strokeWidth={1.8} /><span>Workbench</span></NavLink>
+          <NavLink to="/" end title="Workbench" aria-label="Workbench" className={({ isActive }) => `nav-link ${isActive ? "nav-link-active" : ""}`}><LayoutGrid size={19} strokeWidth={1.8} /><span>Workbench</span></NavLink>
           <p className="nav-label nav-label-tools">Tools</p>
           <div className="module-nav-list">{modules.map((module) => {
             const Icon = moduleIcons[module.icon];
-            return <NavLink key={module.id} to={module.route} className={({ isActive }) => `nav-link ${isActive ? "nav-link-active" : ""}`}><Icon size={19} strokeWidth={1.8} /><span>{module.title}</span>{module.implementation === "planned" && <small>Planned</small>}</NavLink>;
+            return <NavLink key={module.id} to={module.route} title={module.title} aria-label={module.title} className={({ isActive }) => `nav-link ${isActive ? "nav-link-active" : ""}`}><Icon size={19} strokeWidth={1.8} /><span>{module.title}</span>{module.implementation === "planned" && <small>Planned</small>}</NavLink>;
           })}</div>
-          <NavLink to="/settings" state={{ backgroundLocation: location }} className={({ isActive }) => `nav-link settings-nav-link ${isActive ? "nav-link-active" : ""}`}><Settings size={19} strokeWidth={1.8} /><span>Settings</span></NavLink>
+          <NavLink to="/settings" state={{ backgroundLocation: location }} title="Settings" aria-label="Settings" className={({ isActive }) => `nav-link settings-nav-link ${isActive ? "nav-link-active" : ""}`}><Settings size={19} strokeWidth={1.8} /><span>Settings</span></NavLink>
         </nav>
         <div className="mt-auto">
           <div className="service-monitor">
