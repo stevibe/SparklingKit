@@ -33,7 +33,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .mobile-tabbar a.active { @apply text-ink; }
 .mobile-tabbar a.active svg { @apply rounded-[10px] bg-[#2b3037] p-1; width: 30px; height: 30px; }
 .brand-wordmark { @apply font-display text-[26px] leading-none font-extrabold tracking-[-.06em] text-ink; }
-.sidebar-brand-row { @apply mb-9 flex h-8 shrink-0 items-center justify-between gap-2 px-3; }
+.sidebar-brand-row { @apply mb-9 flex h-8 shrink-0 items-center justify-between gap-2 pr-0 pl-3; }
 .sidebar-collapse-button { @apply flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-[11px] text-muted transition hover:bg-[#e9eef6] hover:text-ink; }
 .nav-label { @apply mb-2 px-3 text-[14px] font-bold tracking-[.13em] text-[#7b818a] uppercase; }
 .nav-link { @apply mb-1 flex h-12 items-center gap-3 rounded-full px-4 text-[15px] font-semibold text-[#4e5359] transition-all hover:bg-[#e9eef6] hover:text-ink; }
@@ -217,6 +217,11 @@ textarea.input { resize: vertical; }
 .preview-file-name small { @apply mt-0.5 text-[14px] font-medium text-muted; }
 .preview-tools { @apply flex shrink-0 items-center gap-2; }
 .preview-action-buttons { @apply flex items-center gap-2; }
+.artifact-flow-bar { @apply flex min-h-14 shrink-0 items-center gap-3 border-b border-line bg-[#101318] px-4 py-2.5 sm:px-5; }
+.artifact-flow-bar > span { @apply shrink-0 text-[14px] font-bold text-muted; }
+.artifact-flow-bar > div { @apply flex min-w-0 flex-wrap gap-2; }
+.artifact-flow-action { @apply inline-flex min-h-9 items-center gap-2 rounded-[10px] border border-[#3a414a] bg-[#1b1f24] px-3 text-[14px] font-bold text-[#e8eaed] transition hover:border-[#6d7682] hover:bg-[#272c33]; }
+.artifact-flow-action > svg:last-child { @apply ml-0.5 text-muted; }
 .preview-tools .icon-button:disabled { @apply cursor-not-allowed opacity-40; }
 .copy-file-button.copied { @apply border-emerald-300 bg-emerald-50 text-emerald-700; }
 .view-switch { @apply mr-1 hidden rounded-[10px] bg-[#e8edf4] p-1 sm:flex; }
@@ -377,6 +382,18 @@ textarea.input { resize: vertical; }
 .test-label-short { @apply hidden; }
 .settings-control-grid { @apply grid gap-4 border-t border-line px-4 py-5 sm:px-5 md:grid-cols-[1.35fr_1fr]; }
 .settings-control-full { @apply md:col-span-2; }
+.settings-capabilities { @apply flex flex-wrap items-center justify-between gap-4 border-t border-line px-4 py-4 sm:px-5; }
+.settings-capabilities > div:first-child { @apply min-w-0; }
+.settings-capabilities > div:first-child strong, .settings-capabilities > div:first-child small { @apply block; }
+.settings-capabilities > div:first-child strong { @apply text-[14px] font-bold; }
+.settings-capabilities > div:first-child small { @apply mt-1 text-[14px] leading-5 text-muted; }
+.settings-capability-options { @apply flex flex-wrap gap-2; }
+.settings-capability-options label { @apply flex min-w-36 cursor-pointer items-center gap-2.5 rounded-[12px] border border-line bg-white px-3 py-2.5; }
+.settings-capability-options input { @apply h-4 w-4 shrink-0 cursor-pointer accent-[#dfe3e8]; }
+.settings-capability-options input:disabled { @apply cursor-not-allowed opacity-70; }
+.settings-capability-options span, .settings-capability-options strong, .settings-capability-options small { @apply block; }
+.settings-capability-options strong { @apply text-[14px] font-bold; }
+.settings-capability-options small { @apply mt-0.5 text-[12px] text-muted; }
 .settings-secret-toggle { @apply absolute top-1/2 right-3 flex h-8 w-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-muted transition hover:bg-[#e9edf2] hover:text-ink; }
 .settings-inline-error, .settings-inline-warning { @apply border-t border-line px-5 py-3 text-[14px] leading-5; }
 .settings-inline-error { @apply bg-red-50 text-red-700; }
@@ -694,8 +711,10 @@ select option { background: #15181d; color: #eef0f2; }
 .settings-nav-list button.active { background: #2c2f33; color: #f5f6f7; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .025); }
 .settings-dialog-header { border-color: #383b40; background: rgba(29, 31, 34, .95); }
 .settings-group { border-color: #34383e; background: #181a1d; }
-.settings-control-grid, .settings-inline-error, .settings-inline-warning, .settings-info-row + .settings-info-row, .settings-value-row + .settings-value-row, .settings-advanced, .settings-advanced-body { border-color: #34383e; }
+.settings-control-grid, .settings-capabilities, .settings-inline-error, .settings-inline-warning, .settings-info-row + .settings-info-row, .settings-value-row + .settings-value-row, .settings-advanced, .settings-advanced-body { border-color: #34383e; }
 .settings-control-grid { background: #1d1f22; }
+.settings-capabilities { background: #1d1f22; }
+.settings-capability-options label { border-color: #3a3e44; background: #181a1d; }
 .settings-secret-toggle:hover { background: #2a2d32; color: #f1f3f4; }
 .settings-inline-error { background: #35191c; color: #ffaaa5; }
 .settings-inline-warning { background: #302711; color: #f3cf76; }
@@ -777,6 +796,16 @@ select option { background: #15181d; color: #eef0f2; }
 .module-setup-note a { @apply shrink-0 font-bold underline underline-offset-2; }
 .module-form-empty { @apply mt-2 text-[14px] text-muted; }
 .module-form-actions { @apply mt-7 flex justify-end pt-5; }
+.imported-artifact-card { @apply flex min-w-0 items-center gap-4 rounded-[16px] border border-[#46505b] bg-[#101318] p-4; }
+.imported-artifact-card.compact { @apply mb-5; }
+.imported-artifact-preview { @apply flex h-18 w-18 shrink-0 overflow-hidden rounded-[12px] bg-[#080a0d]; }
+.imported-artifact-preview img { @apply h-full w-full object-cover; }
+.imported-artifact-icon { @apply flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] bg-[#292e35] text-ink; }
+.imported-artifact-copy { @apply min-w-0 flex-1; }
+.imported-artifact-copy small, .imported-artifact-copy strong, .imported-artifact-copy span { @apply block truncate; }
+.imported-artifact-copy small { @apply text-[14px] font-bold text-muted; }
+.imported-artifact-copy strong { @apply mt-1 text-[15px] font-bold text-ink; }
+.imported-artifact-copy span { @apply mt-1 text-[14px] text-muted; }
 .translation-form-heading { @apply flex items-start justify-between gap-5; }
 .module-mode-tabs { @apply flex shrink-0 rounded-[11px] bg-[#0d1014] p-1; }
 .module-mode-tabs button { @apply min-h-9 cursor-pointer rounded-[8px] px-3 text-[14px] font-bold text-muted; }
@@ -1014,6 +1043,10 @@ select option { background: #15181d; color: #eef0f2; }
   .open-file-button { @apply hidden; }
   .preview-tools .button-primary { @apply h-10 w-10 px-0; }
   .preview-tools .button-primary span { @apply hidden; }
+  .artifact-flow-bar { @apply items-start overflow-x-auto px-3; }
+  .artifact-flow-bar > span { @apply pt-2; }
+  .artifact-flow-bar > div { @apply flex-nowrap; }
+  .artifact-flow-action { @apply shrink-0; }
   .preview-content { @apply p-2; }
   .prose-output { @apply px-4.5 py-5 text-[16px] leading-7; }
   .source-preview { @apply p-4 text-[14px] leading-6; }

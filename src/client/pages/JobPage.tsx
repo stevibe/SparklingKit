@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowLeft, Braces, Check, ChevronDown, Code2, Copy, Download, ExternalLink, File, FileAudio, FileJson, FileText, FileVideo, FolderOpen, Image as ImageIcon, Languages, LoaderCircle, MessageCircle, PanelLeft, Pencil, Square, Subtitles, Trash2, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ArrowRight, Braces, Check, ChevronDown, Code2, Copy, Download, ExternalLink, File, FileAudio, FileJson, FileText, FileVideo, FolderOpen, Image as ImageIcon, Languages, LoaderCircle, MessageCircle, PanelLeft, Pencil, ScanSearch, ScanText, Square, Subtitles, Trash2, TriangleAlert } from "lucide-react";
 import { api } from "../api";
 import { ConfirmDialog, JobIcon, Progress, RenameDialog, StatusBadge, cn, formatBytes, timeAgo } from "../components/ui";
-import type { Job, ModuleDescriptor, PromptPreset } from "../types";
+import { compatibleModuleContracts, moduleHandoffUrl } from "../../shared/module-router";
+import type { Job, ModuleDescriptor, ModuleId, PromptPreset } from "../types";
 
 type PreviewMode = "rendered" | "source";
 type DeleteTarget =
@@ -38,6 +39,7 @@ export function JobPage() {
   const [renaming, setRenaming] = useState(false);
   const [renameError, setRenameError] = useState("");
   const [stopping, setStopping] = useState(false);
+  const [openingChat, setOpeningChat] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -83,8 +85,14 @@ export function JobPage() {
   const complete = ["done", "done_with_warnings"].includes(job.status);
   const selectedKind = getFileKind(selectedFile);
   const selectedInput = selectedScope === "input" ? job.inputs.find((input) => input.storedName === selectedFile) : undefined;
-  const selectedArtifact = selectedScope === "output" ? job.artifacts.find((artifact) => artifact.path === `output/${selectedFile}`) : undefined;
-  const translationModule = modules.find((module) => module.id === "translation" && module.implementation === "ready" && selectedArtifact && module.accepts.includes(selectedArtifact.kind));
+  const selectedArtifact = selectedScope === "output"
+    ? job.artifacts.find((artifact) => artifact.path === `output/${selectedFile}`)
+    : job.artifacts.find((artifact) => artifact.path === `input/${selectedFile}`);
+  const producingModule = selectedArtifact?.role === "source" ? job.moduleId : job.runs.find((run) => run.id === selectedArtifact?.createdByRunId)?.moduleId;
+  const sourceModuleId = modules.some((module) => module.id === producingModule) ? producingModule as ModuleId : undefined;
+  const nextActions = selectedArtifact
+    ? compatibleModuleContracts(selectedArtifact.kind, sourceModuleId).filter((contract) => contract.id !== "chat")
+    : [];
   const workflowLabel = modules.find((module) => module.id === job.moduleId)?.title || (job.type === "audio" ? "Transcription" : "OCR");
   const html = extractHtml(preview, selectedFile);
   const canRender = selectedKind === "markdown" || Boolean(html);
@@ -93,8 +101,15 @@ export function JobPage() {
   const selectedDisplayName = selectedScope === "input" ? selectedInput?.name || selectedFile : displayOutputName(selectedFile);
 
   async function openChat() {
-    const chat = await api.createChat(job!.id);
-    navigate(`/chat/${chat.id}`);
+    setOpeningChat(true);
+    setError("");
+    try {
+      const chat = await api.createChat(job!.id);
+      navigate(`/chat/${chat.id}`);
+    } catch (chatError) {
+      setError(chatError instanceof Error ? chatError.message : String(chatError));
+      setOpeningChat(false);
+    }
   }
   async function runPreset(slug: string) {
     if (slug) setJob(await api.runPreset(job!.id, slug));
@@ -188,7 +203,7 @@ export function JobPage() {
   return <div className="job-page">
     <header className="job-titlebar">
       <div className="job-title-left"><Link to="/" className="icon-button" aria-label="Back to workbench"><ArrowLeft size={19} /></Link><JobIcon type={job.type} className="job-title-icon h-11 w-11" /><div className="min-w-0 flex-1"><div className="job-title-line"><h1>{job.title}</h1><button className="inline-rename-button" onClick={() => askToRename({ kind: "job", value: job.title })} aria-label="Rename job" title="Rename job"><Pencil size={14} /></button></div><div className="job-meta"><StatusBadge status={job.status} /><span>{formatBytes(job.inputs.reduce((sum, input) => sum + input.size, 0))}</span><i /><span>{timeAgo(job.createdAt)}</span></div></div><button className="icon-button destructive-icon-button job-delete-mobile" onClick={() => askToDelete({ kind: "job", label: job.title })} aria-label="Delete job" title="Delete job"><Trash2 size={17} /></button></div>
-      <div className="job-actions">{running ? <button className="button-secondary stop-job-button" onClick={stopJob} disabled={stopping}>{stopping ? <LoaderCircle size={15} className="animate-spin" /> : <Square size={15} fill="currentColor" />}{stopping ? "Stopping…" : "Stop job"}</button> : complete ? <><label className="preset-button"><Braces size={17} /><select defaultValue="" onChange={(event) => { runPreset(event.target.value); event.target.value = ""; }}><option value="" disabled>Run a preset</option>{prompts.map((prompt) => <option key={prompt.slug} value={prompt.slug}>{prompt.name}</option>)}</select><ChevronDown size={15} /></label><button className="button-secondary" onClick={openChat}><MessageCircle size={17} />Ask in chat</button></> : null}<button className="icon-button destructive-icon-button job-delete-desktop" onClick={() => askToDelete({ kind: "job", label: job.title })} aria-label="Delete job" title="Delete job"><Trash2 size={17} /></button></div>
+      <div className="job-actions">{running ? <button className="button-secondary stop-job-button" onClick={stopJob} disabled={stopping}>{stopping ? <LoaderCircle size={15} className="animate-spin" /> : <Square size={15} fill="currentColor" />}{stopping ? "Stopping…" : "Stop job"}</button> : complete ? <><label className="preset-button"><Braces size={17} /><select defaultValue="" onChange={(event) => { runPreset(event.target.value); event.target.value = ""; }}><option value="" disabled>Run a preset</option>{prompts.map((prompt) => <option key={prompt.slug} value={prompt.slug}>{prompt.name}</option>)}</select><ChevronDown size={15} /></label><button className="button-secondary" onClick={openChat} disabled={openingChat}>{openingChat ? <LoaderCircle size={17} className="animate-spin" /> : <MessageCircle size={17} />}{openingChat ? "Opening…" : "Ask in chat"}</button></> : null}<button className="icon-button destructive-icon-button job-delete-desktop" onClick={() => askToDelete({ kind: "job", label: job.title })} aria-label="Delete job" title="Delete job"><Trash2 size={17} /></button></div>
     </header>
 
     {error && <div className="error-card job-alert"><TriangleAlert size={19} /><div><strong>Action failed</strong><p>{error}</p></div></div>}
@@ -212,8 +227,9 @@ export function JobPage() {
         {running ? <ProcessingView job={job} /> : selectedFile ? <>
           <div className="preview-toolbar">
             <div className="preview-file-name"><FileTypeIcon file={selectedInput?.name || selectedFile} /><span><strong>{selectedDisplayName}</strong><small>{selectedScope === "input" ? "Source file" : selectedFile.split("/").at(-1)} · {formatLabel(selectedKind, Boolean(html))}</small></span></div>
-            <div className="preview-tools">{canRender && <div className="view-switch"><button className={previewMode === "rendered" ? "active" : ""} onClick={() => setPreviewMode("rendered")}>Preview</button><button className={previewMode === "source" ? "active" : ""} onClick={() => setPreviewMode("source")}>Source</button></div>}<span className="preview-action-buttons">{translationModule && selectedArtifact && <Link className="icon-button" to={`/tools/translation?job=${encodeURIComponent(job.id)}&artifact=${encodeURIComponent(selectedArtifact.id)}`} aria-label="Translate this file" title={translationModule.configured ? "Translate this file" : "Configure Translation to use this file"}><Languages size={17} /></Link>}<button className="icon-button rename-file-button" onClick={() => askToRename(selectedScope === "input" ? { kind: "input", file: selectedFile, value: selectedInput?.name || selectedFile } : { kind: "output", file: selectedFile, value: selectedFile.split("/").at(-1) || selectedFile })} disabled={running} aria-label="Rename file" title={running ? "Files cannot be renamed while processing" : "Rename file"}><Pencil size={16} /></button>{canCopy && <button className={cn("icon-button copy-file-button", copiedFile === selectedFile && "copied")} onClick={copyPreview} disabled={loadingPreview} aria-label={copiedFile === selectedFile ? "Copied file contents" : "Copy file contents"} title={copiedFile === selectedFile ? "Copied" : "Copy file contents"}>{copiedFile === selectedFile ? <Check size={17} /> : <Copy size={17} />}</button>}<button className="icon-button destructive-icon-button" onClick={() => askToDelete({ kind: selectedScope, file: selectedFile, label: selectedDisplayName })} disabled={running} aria-label="Delete file" title={running ? "Files cannot be deleted while processing" : "Delete file"}><Trash2 size={17} /></button><a className="icon-button open-file-button" href={selectedUrl} target="_blank" rel="noreferrer" aria-label="Open file"><ExternalLink size={17} /></a><a className="button-primary compact" href={selectedUrl} download><Download size={16} /><span>Download</span></a></span></div>
+            <div className="preview-tools">{canRender && <div className="view-switch"><button className={previewMode === "rendered" ? "active" : ""} onClick={() => setPreviewMode("rendered")}>Preview</button><button className={previewMode === "source" ? "active" : ""} onClick={() => setPreviewMode("source")}>Source</button></div>}<span className="preview-action-buttons"><button className="icon-button rename-file-button" onClick={() => askToRename(selectedScope === "input" ? { kind: "input", file: selectedFile, value: selectedInput?.name || selectedFile } : { kind: "output", file: selectedFile, value: selectedFile.split("/").at(-1) || selectedFile })} disabled={running} aria-label="Rename file" title={running ? "Files cannot be renamed while processing" : "Rename file"}><Pencil size={16} /></button>{canCopy && <button className={cn("icon-button copy-file-button", copiedFile === selectedFile && "copied")} onClick={copyPreview} disabled={loadingPreview} aria-label={copiedFile === selectedFile ? "Copied file contents" : "Copy file contents"} title={copiedFile === selectedFile ? "Copied" : "Copy file contents"}>{copiedFile === selectedFile ? <Check size={17} /> : <Copy size={17} />}</button>}<button className="icon-button destructive-icon-button" onClick={() => askToDelete({ kind: selectedScope, file: selectedFile, label: selectedDisplayName })} disabled={running} aria-label="Delete file" title={running ? "Files cannot be deleted while processing" : "Delete file"}><Trash2 size={17} /></button><a className="icon-button open-file-button" href={selectedUrl} target="_blank" rel="noreferrer" aria-label="Open file"><ExternalLink size={17} /></a><a className="button-primary compact" href={selectedUrl} download><Download size={16} /><span>Download</span></a></span></div>
           </div>
+          {selectedArtifact && nextActions.length > 0 && <div className="artifact-flow-bar"><span>Continue with</span><div>{nextActions.map((action) => <Link className="artifact-flow-action" to={moduleHandoffUrl(action.id, job.id, selectedArtifact.id)} title={action.actionDescription} key={action.id}><FlowActionIcon moduleId={action.id} /><span>{action.actionLabel}</span><ArrowRight size={15} /></Link>)}</div></div>}
           {selectedScope === "output" && job.type === "audio" && job.inputs[0] && selectedFile === outputFiles[0] && <div className="workspace-player">{job.inputs[0].mimeType.startsWith("video/") ? <video controls preload="metadata" src={`/api/jobs/${job.id}/input/${encodeURIComponent(job.inputs[0].storedName)}`} /> : <audio controls preload="metadata" src={`/api/jobs/${job.id}/input/${encodeURIComponent(job.inputs[0].storedName)}`} />}</div>}
           <div className="preview-content">{loadingPreview ? <div className="preview-loading"><span className="spinner dark" />Loading preview…</div> : <OutputPreview content={preview} kind={selectedKind} html={html} mode={previewMode} title={selectedDisplayName} src={selectedUrl} />}</div>
         </> : <div className="workspace-empty"><FolderOpen size={36} /><h2>No output yet</h2><p>This job did not create any files.</p></div>}
@@ -222,6 +238,11 @@ export function JobPage() {
     <RenameDialog open={Boolean(renameTarget)} title={renameDialogTitle} label={renameTarget?.kind === "job" ? "Job name" : "File name"} value={renameValue} helper={renamedExtension ? `The ${renamedExtension} extension will be preserved.` : undefined} busy={renaming} error={renameError} onChange={setRenameValue} onCancel={() => !renaming && setRenameTarget(undefined)} onConfirm={confirmRename} />
     <ConfirmDialog open={Boolean(deleteTarget)} title={deleteTitle} description={deleteDescription} busy={deleting} error={deleteError} onCancel={() => !deleting && setDeleteTarget(undefined)} onConfirm={confirmDelete} />
   </div>;
+}
+
+function FlowActionIcon({ moduleId }: { moduleId: ModuleId }) {
+  const Icon = moduleId === "translation" ? Languages : moduleId === "grounding" ? ScanSearch : moduleId === "ocr" ? ScanText : moduleId === "text-to-image" ? ImageIcon : MessageCircle;
+  return <Icon size={17} />;
 }
 
 function ProcessingView({ job }: { job: Job }) {

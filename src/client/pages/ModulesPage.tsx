@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { ArrowLeftRight, ArrowRight, AudioLines, CloudUpload, ExternalLink, FolderOpen, Image as ImageIcon, Languages, MessageCircle, ScanSearch, ScanText } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, AudioLines, CloudUpload, ExternalLink, FileText, FolderOpen, Image as ImageIcon, Languages, MessageCircle, ScanSearch, ScanText, X } from "lucide-react";
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, uploadGroundingJob, uploadJob } from "../api";
 import { cn, JobIcon, StatusBadge, timeAgo } from "../components/ui";
+import { moduleWorkflowForArtifact } from "../../shared/module-router";
 import { savedTranslationPreferences, translationLanguages, translationPreferenceKey } from "../translation";
 import type { Job, JobKind, ModuleDescriptor, ModuleId } from "../types";
 
@@ -82,7 +83,8 @@ export function ModulePage() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const translationPreviewController = useRef<AbortController | undefined>(undefined);
-  const onDrop = useCallback((accepted: File[]) => { setFiles(accepted); setError(""); }, []);
+  const importedPromptRef = useRef("");
+  const onDrop = useCallback((accepted: File[]) => { setFiles(accepted); setSelectedArtifact(""); setError(""); }, []);
   const accepts = useMemo<Record<string, string[]>>(() => Object.fromEntries(moduleId === "ocr"
     ? [["image/*", []], ["application/pdf", [".pdf"]]]
     : moduleId === "grounding"
@@ -133,14 +135,29 @@ export function ModulePage() {
       translationPreviewController.current?.abort();
     };
   }, [module?.configured, moduleId, sourceLanguage, sourceText, targetLanguage, translationMode]);
-  const textArtifacts = jobs.flatMap((job) => job.artifacts
-    .filter((artifact) => Boolean(module?.accepts.includes(artifact.kind)) && artifact.role !== "source")
+  const compatibleArtifacts = jobs.flatMap((job) => job.artifacts
+    .filter((artifact) => Boolean(module?.accepts.includes(artifact.kind)))
     .map((artifact) => ({ job, artifact, value: `${job.id}|${artifact.id}` })));
+  const selectedArtifactEntry = compatibleArtifacts.find((entry) => entry.value === selectedArtifact);
   useEffect(() => {
-    if (selectedArtifact || !textArtifacts.length) return;
+    if (selectedArtifact || !compatibleArtifacts.length) return;
     const requested = `${searchParams.get("job") || ""}|${searchParams.get("artifact") || ""}`;
-    if (textArtifacts.some((entry) => entry.value === requested)) setSelectedArtifact(requested);
-  }, [selectedArtifact, searchParams, textArtifacts]);
+    if (compatibleArtifacts.some((entry) => entry.value === requested)) {
+      setSelectedArtifact(requested);
+      if (moduleId === "translation") setTranslationMode("document");
+    }
+  }, [compatibleArtifacts, moduleId, searchParams, selectedArtifact]);
+  useEffect(() => {
+    if (moduleId !== "text-to-image" || !selectedArtifactEntry || importedPromptRef.current === selectedArtifactEntry.value) return;
+    importedPromptRef.current = selectedArtifactEntry.value;
+    fetch(artifactUrl(selectedArtifactEntry.job.id, selectedArtifactEntry.artifact))
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Could not load the selected text result");
+        return response.text();
+      })
+      .then((content) => setImagePrompt(content.replace(/<!--[\s\S]*?-->\s*/g, "").trim().slice(0, 12_000)))
+      .catch((value) => setError(value instanceof Error ? value.message : String(value)));
+  }, [moduleId, selectedArtifactEntry]);
 
   if (moduleId === "chat") return <Navigate to="/chat" replace />;
   if (!modules.length && !loadError) return <div className="page-wrap content-page"><div className="skeleton h-64" /></div>;
@@ -164,12 +181,13 @@ export function ModulePage() {
 
   async function translate() {
     const [jobId, artifactId] = selectedArtifact.split("|");
-    if (!jobId || !artifactId || !targetLanguage.trim()) return;
+    const workflowId = selectedArtifactEntry && moduleWorkflowForArtifact("translation", selectedArtifactEntry.artifact.kind);
+    if (!jobId || !artifactId || !workflowId || !targetLanguage.trim()) return;
     setUploading(true); setError("");
     try {
       const queued = await api.startRun(jobId, {
         moduleId: "translation",
-        workflowId: "translation.default",
+        workflowId,
         inputArtifactIds: [artifactId],
         params: { artifactId, targetLanguage: targetLanguage.trim(), sourceLanguage },
       });
@@ -227,8 +245,20 @@ export function ModulePage() {
     if (!imagePrompt.trim()) return;
     setUploading(true); setError("");
     try {
-      const job = await api.createImageJob(imagePrompt.trim(), imageSize);
-      navigate(`/jobs/${job.id}`);
+      if (selectedArtifactEntry) {
+        const workflowId = moduleWorkflowForArtifact("text-to-image", selectedArtifactEntry.artifact.kind);
+        if (!workflowId) throw new Error("This result cannot be used as an image prompt");
+        const queued = await api.startRun(selectedArtifactEntry.job.id, {
+          moduleId: "text-to-image",
+          workflowId,
+          inputArtifactIds: [selectedArtifactEntry.artifact.id],
+          params: { artifactId: selectedArtifactEntry.artifact.id, prompt: imagePrompt.trim(), size: imageSize },
+        });
+        navigate(`/jobs/${queued.job.id}`);
+      } else {
+        const job = await api.createImageJob(imagePrompt.trim(), imageSize);
+        navigate(`/jobs/${job.id}`);
+      }
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
     } finally {
@@ -238,15 +268,47 @@ export function ModulePage() {
 
   async function startGrounding() {
     const queries = [...new Set(groundingQueries.split(/\r?\n/).map((query) => query.trim()).filter(Boolean))].slice(0, 12);
-    if (files.length !== 1 || !queries.length) return;
+    if ((!selectedArtifactEntry && files.length !== 1) || !queries.length) return;
     setUploading(true); setError("");
     try {
-      const job = await uploadGroundingJob(files[0], queries, setUploadProgress);
-      navigate(`/jobs/${job.id}`);
+      if (selectedArtifactEntry) {
+        const workflowId = moduleWorkflowForArtifact("grounding", selectedArtifactEntry.artifact.kind);
+        if (!workflowId) throw new Error("This result cannot be used for grounding");
+        const queued = await api.startRun(selectedArtifactEntry.job.id, {
+          moduleId: "grounding",
+          workflowId,
+          inputArtifactIds: [selectedArtifactEntry.artifact.id],
+          params: { artifactId: selectedArtifactEntry.artifact.id, queries },
+        });
+        navigate(`/jobs/${queued.job.id}`);
+      } else {
+        const job = await uploadGroundingJob(files[0], queries, setUploadProgress);
+        navigate(`/jobs/${job.id}`);
+      }
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
     } finally {
       setUploading(false); setUploadProgress(0);
+    }
+  }
+
+  async function startImportedOcr() {
+    if (!selectedArtifactEntry) return;
+    const workflowId = moduleWorkflowForArtifact("ocr", selectedArtifactEntry.artifact.kind);
+    if (!workflowId) return;
+    setUploading(true); setError("");
+    try {
+      const queued = await api.startRun(selectedArtifactEntry.job.id, {
+        moduleId: "ocr",
+        workflowId,
+        inputArtifactIds: [selectedArtifactEntry.artifact.id],
+        params: { artifactId: selectedArtifactEntry.artifact.id },
+      });
+      navigate(`/jobs/${queued.job.id}`);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -258,14 +320,19 @@ export function ModulePage() {
     <main className="module-workspace-main">{module.id === "grounding" ? <section className="module-form-card grounding-form">
       <div className="module-form-heading"><h2>Find things in an image</h2><p>Add one image and describe each object, text region, or visual element you want to locate. Every line becomes a separate search.</p></div>
       {!module.configured && <div className="module-setup-note"><span>The Grounding service is not configured yet.</span><Link to="/settings" state={{ backgroundLocation: location }}>Configure service</Link></div>}
-      <div {...getRootProps()} className={cn("grounding-dropzone", isDragActive && "active", files.length && "has-file")}>
+      {selectedArtifactEntry ? <ImportedArtifactCard job={selectedArtifactEntry.job} artifact={selectedArtifactEntry.artifact} onRemove={() => setSelectedArtifact("")} /> : <div {...getRootProps()} className={cn("grounding-dropzone", isDragActive && "active", files.length && "has-file")}>
         <input {...getInputProps()} />
         <span className="grounding-dropzone-icon"><ImageIcon size={24} /></span>
         <span className="grounding-dropzone-copy"><strong>{files[0]?.name || (isDragActive ? "Drop the image here" : "Choose an image")}</strong><small>{files[0] ? `${Math.max(1, Math.round(files[0].size / 1024))} KB · ready to search` : "PNG, JPEG, or WebP"}</small></span>
         <button type="button" className="button-secondary">{files[0] ? "Replace" : "Browse"}</button>
-      </div>
+      </div>}
       <label className="field-label">What should SparklingKit find?<textarea className="input mt-2 grounding-query-input" value={groundingQueries} onChange={(event) => setGroundingQueries(event.target.value)} placeholder={"SparklingKit logo\nSettings button\nPerson wearing glasses"} maxLength={6000} /><small className="grounding-query-help">One query per line · up to 12 queries</small></label>
-      <div className="module-form-actions"><button className="button-primary" onClick={() => void startGrounding()} disabled={uploading || !module.configured || files.length !== 1 || !groundingQueries.trim()}>{uploading ? `Uploading ${uploadProgress}%` : <><ScanSearch size={18} />Find locations</>}</button></div>
+      <div className="module-form-actions"><button className="button-primary" onClick={() => void startGrounding()} disabled={uploading || !module.configured || (!selectedArtifactEntry && files.length !== 1) || !groundingQueries.trim()}>{uploading ? selectedArtifactEntry ? "Starting…" : `Uploading ${uploadProgress}%` : <><ScanSearch size={18} />Find locations</>}</button></div>
+    </section> : canUpload && module.id === "ocr" && selectedArtifactEntry ? <section className="module-form-card imported-workflow-form">
+      <div className="module-form-heading"><h2>Read text from this image</h2><p>The extracted document will stay with the image as its next result.</p></div>
+      {!module.configured && <div className="module-setup-note"><span>The OCR service is not configured yet.</span><Link to="/settings" state={{ backgroundLocation: location }}>Configure service</Link></div>}
+      <ImportedArtifactCard job={selectedArtifactEntry.job} artifact={selectedArtifactEntry.artifact} onRemove={() => setSelectedArtifact("")} />
+      <div className="module-form-actions"><button className="button-primary" onClick={() => void startImportedOcr()} disabled={uploading || !module.configured}>{uploading ? "Starting…" : <><ScanText size={18} />Read text</>}</button></div>
     </section> : canUpload ? <section className={cn("upload-card", isDragActive && "upload-card-active")}>
       <div {...getRootProps()} className="upload-dropzone module-dropzone">
         <input {...getInputProps()} />
@@ -278,8 +345,8 @@ export function ModulePage() {
       <div className="module-form-heading translation-form-heading"><div><h2>{translationMode === "document" ? "Translate an existing result" : "Translate text"}</h2><p>{translationMode === "document" ? "Choose a document or transcript. The translated file stays beside its source." : "Paste or type text and see the translated result without leaving this page."}</p></div><div className="module-mode-tabs" role="tablist"><button className={translationMode === "text" ? "active" : ""} onClick={() => setTranslationMode("text")}>Text</button><button className={translationMode === "document" ? "active" : ""} onClick={() => setTranslationMode("document")}>Document</button></div></div>
       {!module.configured && <div className="module-setup-note"><span>The Translation service is not configured yet.</span><Link to="/settings" state={{ backgroundLocation: location }}>Configure service</Link></div>}
       {translationMode === "document" ? <>
-        <label className="field-label">Source result<span className="select-wrap"><select value={selectedArtifact} onChange={(event) => setSelectedArtifact(event.target.value)}><option value="">Choose a document or transcript</option>{textArtifacts.map(({ job, artifact, value }) => <option value={value} key={value}>{job.title} — {artifact.name}</option>)}</select></span></label>
-        {!textArtifacts.length && <p className="module-form-empty">Complete an OCR or transcription job first. Its primary result will appear here automatically.</p>}
+        <label className="field-label">Source result<span className="select-wrap"><select value={selectedArtifact} onChange={(event) => setSelectedArtifact(event.target.value)}><option value="">Choose a document or transcript</option>{compatibleArtifacts.map(({ job, artifact, value }) => <option value={value} key={value}>{job.title} — {artifact.name}</option>)}</select></span></label>
+        {!compatibleArtifacts.length && <p className="module-form-empty">Complete an OCR or transcription job first. Its primary result will appear here automatically.</p>}
         <div className="translation-document-languages"><LanguageSelect label="From" value={sourceLanguage} allowAuto onChange={setSourceLanguage} /><LanguageSelect label="To" value={targetLanguage} onChange={setTargetLanguage} /></div>
         <div className="module-form-actions"><button className="button-primary" onClick={() => { rememberLanguages(); void translate(); }} disabled={uploading || !module.configured || !selectedArtifact || !targetLanguage.trim()}>{uploading ? "Starting…" : <>Start translation<ArrowRight size={18} /></>}</button></div>
       </> : <>
@@ -294,6 +361,7 @@ export function ModulePage() {
     </section> : module.id === "text-to-image" ? <section className="module-form-card image-generation-form">
       <div className="module-form-heading"><h2>Describe the image</h2><p>Write what you want to see. SparklingKit will keep the prompt and generated image together as one piece of work.</p></div>
       {!module.configured && <div className="module-setup-note"><span>The Image generation service is not configured yet.</span><Link to="/settings" state={{ backgroundLocation: location }}>Configure service</Link></div>}
+      {selectedArtifactEntry && <ImportedArtifactCard job={selectedArtifactEntry.job} artifact={selectedArtifactEntry.artifact} onRemove={() => { setSelectedArtifact(""); importedPromptRef.current = ""; setImagePrompt(""); }} compact />}
       <label className="field-label">Prompt<textarea className="input mt-2 image-prompt-input" value={imagePrompt} onChange={(event) => setImagePrompt(event.target.value)} placeholder="A quiet reading room at night, warm table lamps, rain on tall windows, editorial photography" maxLength={12000} /></label>
       <label className="field-label">Canvas<span className="select-wrap"><select value={imageSize} onChange={(event) => setImageSize(event.target.value)}><option value="1024x1024">Square · 1024 × 1024</option><option value="1536x1024">Landscape · 1536 × 1024</option><option value="1024x1536">Portrait · 1024 × 1536</option></select></span></label>
       <div className="module-form-actions"><button className="button-primary" onClick={() => void createImage()} disabled={uploading || !module.configured || !imagePrompt.trim()}>{uploading ? "Starting…" : <><ImageIcon size={18} />Generate image</>}</button></div>
@@ -317,6 +385,21 @@ function ModuleHistory({ module, jobs }: { module: ModuleDescriptor; jobs: Job[]
       </Link>;
     })}{!jobs.length && <div className="module-history-empty"><FolderOpen size={22} /><strong>No history yet</strong><p>Completed and active jobs from this module will appear here.</p></div>}</div>
   </aside>;
+}
+
+function ImportedArtifactCard({ job, artifact, onRemove, compact = false }: { job: Job; artifact: Job["artifacts"][number]; onRemove: () => void; compact?: boolean }) {
+  const image = artifact.mimeType.startsWith("image/") || ["source-image", "generated-image", "grounded-image"].includes(artifact.kind);
+  return <div className={cn("imported-artifact-card", compact && "compact")}>
+    {image ? <span className="imported-artifact-preview"><img src={artifactUrl(job.id, artifact)} alt="" /></span> : <span className="imported-artifact-icon"><FileText size={21} /></span>}
+    <span className="imported-artifact-copy"><small>From {job.title}</small><strong>{artifact.name}</strong><span>This result will stay linked to the next output.</span></span>
+    <button className="icon-button" type="button" onClick={onRemove} aria-label="Choose a different source" title="Choose a different source"><X size={17} /></button>
+  </div>;
+}
+
+function artifactUrl(jobId: string, artifact: Job["artifacts"][number]) {
+  if (artifact.path.startsWith("input/")) return `/api/jobs/${jobId}/input/${encodeURIComponent(artifact.path.slice("input/".length))}`;
+  const relative = artifact.path.replace(/^output\//, "");
+  return `/api/jobs/${jobId}/files/${relative.split("/").map(encodeURIComponent).join("/")}`;
 }
 
 function LanguageSelect({ label, value, allowAuto = false, recent = [], onChange }: { label: string; value: string; allowAuto?: boolean; recent?: string[]; onChange: (value: string) => void }) {

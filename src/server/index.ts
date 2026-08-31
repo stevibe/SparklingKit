@@ -5,8 +5,10 @@ import express, { type NextFunction, type Request, type Response } from "express
 import cors from "cors";
 import multer from "multer";
 import { z } from "zod";
-import { ENDPOINT_KINDS, MODULE_IDS } from "../shared/contracts.js";
+import { ENDPOINT_KINDS, MODEL_INPUT_CAPABILITIES, MODULE_IDS } from "../shared/contracts.js";
+import { getModuleContract, moduleAcceptsArtifact, moduleWorkflowForArtifact } from "../shared/module-router.js";
 import { checkEndpoint, openChatStream } from "./ai.js";
+import { modelMessagesForChat } from "./chat-messages.js";
 import { CLIENT_DIR, DATA_DIR, PORT } from "./config.js";
 import { jobEvents, publishJob } from "./events.js";
 import type { ChatMessage, EndpointKind, JobKind, PromptPreset, Settings } from "./models.js";
@@ -61,6 +63,7 @@ const endpointSchema = z.object({
   model: z.string(),
   apiKey: z.string(),
   enabled: z.boolean(),
+  capabilities: z.array(z.enum(MODEL_INPUT_CAPABILITIES)).optional(),
 }).refine((endpoint) => !endpoint.enabled || Boolean(endpoint.baseUrl && endpoint.model), "Enabled services require a base URL and model");
 const settingsSchema = z.object({
   schemaVersion: z.literal(2),
@@ -287,12 +290,15 @@ app.post("/api/jobs/:id/runs", async (request, response) => {
   const input = workflowRunSchema.parse(request.body);
   const job = await readJob(request.params.id);
   const module = listModules(await readSettings()).find((candidate) => candidate.id === input.moduleId);
+  const contract = getModuleContract(input.moduleId);
   if (!module || module.implementation !== "ready") return response.status(409).json({ error: "This module is not ready to run" });
   if (!module.configured) return response.status(409).json({ error: `Configure and enable the ${module.title} service first` });
-  if (input.moduleId !== "translation" || input.workflowId !== "translation.default") return response.status(400).json({ error: "Unsupported workflow" });
+  if (!contract || contract.handoff.mode !== "workflow") return response.status(400).json({ error: "Unsupported workflow" });
+  if (input.inputArtifactIds.length > contract.handoff.maxInputs) return response.status(400).json({ error: `${module.title} accepts at most ${contract.handoff.maxInputs} input${contract.handoff.maxInputs === 1 ? "" : "s"}` });
   const artifacts = input.inputArtifactIds.map((id) => job.artifacts.find((artifact) => artifact.id === id));
   if (artifacts.some((artifact) => !artifact)) return response.status(400).json({ error: "One or more input artifacts do not exist" });
-  if (artifacts.some((artifact) => artifact && !module.accepts.includes(artifact.kind))) return response.status(400).json({ error: "The selected artifact is not compatible with this module" });
+  if (artifacts.some((artifact) => artifact && !moduleAcceptsArtifact(input.moduleId, artifact.kind))) return response.status(400).json({ error: "The selected artifact is not compatible with this module" });
+  if (artifacts.some((artifact) => artifact && moduleWorkflowForArtifact(input.moduleId, artifact.kind) !== input.workflowId)) return response.status(400).json({ error: "The selected artifact is not compatible with this workflow" });
   const queued = await enqueueWorkflowRun(job.id, input.moduleId, input.workflowId, input.params, input.inputArtifactIds);
   response.status(202).json(queued);
 });
@@ -441,7 +447,7 @@ app.post("/api/chats/:id/messages", async (request, response) => {
   try {
     const body = await openChatStream(
       { ...settings.endpoints.llm, model: chat.model || settings.endpoints.llm.model },
-      chat.messages.map(({ role, content: messageContent }) => ({ role, content: messageContent })),
+      await modelMessagesForChat(chat, settings),
       chat.temperature,
       upstreamController.signal,
     );

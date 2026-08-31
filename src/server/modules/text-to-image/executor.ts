@@ -22,7 +22,8 @@ export async function processTextToImage(job: JobManifest, run: WorkflowRun, sig
   const generated = await generateImage(endpoint, prompt, { size }, signal);
   if (signal?.aborted) throw new DOMException("Image generation cancelled", "AbortError");
   await report(job.id, { status: "merging", progress: 94, stage: "Saving generated image", detail: undefined });
-  const outputName = `generated-image${generated.extension}`;
+  const baseName = `generated-image${generated.extension}`;
+  const outputName = job.outputFiles.includes(baseName) ? `generated-image-${run.id.replace(/^run-/, "").slice(0, 8)}${generated.extension}` : baseName;
   await fs.writeFile(safeOutputPath(job.id, outputName), generated.bytes);
-  return { outputFiles: [outputName], warnings: [] };
+  return { outputFiles: [...new Set([...job.outputFiles, outputName])], warnings: [] };
 }

@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { AudioLines, Check, ChevronDown, ChevronRight, CircleAlert, Clock3, Eye, EyeOff, FileCog, Files, Image as ImageIcon, Languages, LoaderCircle, Plus, Save, ScanSearch, ScanText, Server, SlidersHorizontal, Sparkles, X } from "lucide-react";
 import { api } from "../api";
 import { cn } from "../components/ui";
-import type { EndpointHealth, EndpointKind, PromptPreset, Settings } from "../types";
+import type { EndpointHealth, EndpointKind, ModelInputCapability, PromptPreset, Settings } from "../types";
 
 const endpointMeta: Record<EndpointKind, { title: string; caption: string; tint: string; icon: typeof AudioLines }> = {
   stt: { title: "Speech to text", caption: "Audio and video transcription", tint: "endpoint-icon endpoint-stt", icon: AudioLines },
@@ -115,6 +115,17 @@ export function SettingsPage() {
   function endpointChange(kind: EndpointKind, field: "baseUrl" | "model" | "apiKey", value: string) {
     setSettings((current) => current ? ({ ...current, endpoints: { ...current.endpoints, [kind]: { ...current.endpoints[kind], [field]: value } } }) : current);
   }
+  function endpointCapabilityChange(kind: EndpointKind, capability: ModelInputCapability, enabled: boolean) {
+    setSettings((current) => {
+      if (!current) return current;
+      const endpoint = current.endpoints[kind];
+      const capabilities = new Set(endpoint.capabilities || ["text"]);
+      if (enabled) capabilities.add(capability);
+      else capabilities.delete(capability);
+      capabilities.add("text");
+      return { ...current, endpoints: { ...current.endpoints, [kind]: { ...endpoint, capabilities: [...capabilities] } } };
+    });
+  }
   function selectAudioProfile(profile: AudioProfile) {
     if (!settings || profile === "custom") return;
     setSettings({ ...settings, audio: { ...settings.audio, ...audioProfiles[profile].values } });
@@ -159,6 +170,13 @@ export function SettingsPage() {
                   <label className="field-label">Model<input className="input mt-2" value={endpoint.model} onChange={(event) => endpointChange(kind, "model", event.target.value)} /></label>
                   <label className="field-label settings-control-full">API key <span className="font-normal text-muted">(optional)</span><span className="relative mt-2 block"><input className="input pr-11" type={showKeys[kind] ? "text" : "password"} value={endpoint.apiKey} placeholder="Not required for local endpoints" onChange={(event) => endpointChange(kind, "apiKey", event.target.value)} /><button className="settings-secret-toggle" onClick={() => setShowKeys((value) => ({ ...value, [kind]: !value[kind] }))} type="button" aria-label={showKeys[kind] ? "Hide API key" : "Show API key"}>{showKeys[kind] ? <EyeOff size={16} /> : <Eye size={16} />}</button></span></label>
                 </div>
+                {kind === "llm" && <div className="settings-capabilities">
+                  <div><strong>Accepted inputs</strong><small>Controls which linked materials SparklingKit may send to this model.</small></div>
+                  <div className="settings-capability-options">
+                    <label><input type="checkbox" checked disabled /><span><strong>Text</strong><small>Required for chat</small></span></label>
+                    <label><input type="checkbox" checked={endpoint.capabilities?.includes("image") || false} onChange={(event) => endpointCapabilityChange(kind, "image", event.target.checked)} /><span><strong>Images</strong><small>OpenAI-compatible image input</small></span></label>
+                  </div>
+                </div>}
                 {result && result !== "testing" && !result.ok && <p className="settings-inline-error">{result.error}</p>}
                 {result && result !== "testing" && result.ok && result.availableModels.length > 0 && !result.availableModels.includes(endpoint.model) && <p className="settings-inline-warning">Connected, but the configured model was not advertised. Available: {result.availableModels.join(", ")}</p>}
               </section>;

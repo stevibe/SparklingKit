@@ -262,4 +262,48 @@ describe("v2 workflow architecture", () => {
     const annotations = JSON.parse(await fs.readFile(path.join(store.jobDir(created.id), "output", "grounding.annotations.json"), "utf8"));
     expect(annotations.queries[0].boxes[0]).toEqual({ x1: 19.2, y1: 19.2, x2: 256, y2: 57.6 });
   });
+
+  it("routes a generated image into grounding without uploading it again", async () => {
+    server = createServer((request, response) => {
+      request.resume();
+      request.on("end", () => {
+        response.setHeader("Content-Type", "application/json");
+        response.end(JSON.stringify({
+          answer: "<ref>cat</ref><box><100><100><800><800></box>",
+          image_width: 1024,
+          image_height: 1024,
+          boxes: [{ x1: 102.4, y1: 102.4, x2: 819.2, y2: 819.2 }],
+          points: [],
+        }));
+      });
+    });
+    await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Test server did not start");
+
+    const store = await import("./store.js");
+    await store.initializeData();
+    const settings = await store.readSettings();
+    await store.writeSettings({
+      ...settings,
+      endpoints: {
+        ...settings.endpoints,
+        grounding: { enabled: true, baseUrl: `http://127.0.0.1:${address.port}/v1`, model: "grounder", apiKey: "" },
+      },
+    });
+    const created = await store.createTextToImageJob("A cat on a book");
+    await fs.writeFile(store.safeOutputPath(created.id, "generated-image.png"), Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z8XcAAAAASUVORK5CYII=", "base64"));
+    const generatedJob = await store.updateJob(created.id, { status: "done", progress: 100, stage: "Complete", outputFiles: ["generated-image.png"] });
+    const generated = generatedJob.artifacts.find((artifact) => artifact.kind === "generated-image")!;
+    const routed = await store.createWorkflowRun(created.id, "grounding", "grounding.image", { artifactId: generated.id, queries: ["cat"] }, [generated.id]);
+
+    const processor = await import("./processor.js");
+    await processor.processRun(created.id, routed.run.id);
+
+    const completed = await store.readJob(created.id);
+    expect(completed.outputFiles).toEqual(["generated-image.png", "grounding-preview.svg", "grounding.annotations.json"]);
+    const preview = completed.artifacts.find((artifact) => artifact.kind === "grounded-image")!;
+    expect(preview.derivedFrom).toEqual([generated.id]);
+    expect(await fs.readFile(store.safeOutputPath(created.id, "grounding-preview.svg"), "utf8")).toContain("cat");
+  });
 });

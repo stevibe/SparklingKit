@@ -4,6 +4,9 @@ export type ModuleId = (typeof MODULE_IDS)[number];
 export const ENDPOINT_KINDS = ["stt", "ocr", "llm", "translation", "grounding", "image-generation"] as const;
 export type EndpointKind = (typeof ENDPOINT_KINDS)[number];
 
+export const MODEL_INPUT_CAPABILITIES = ["text", "image"] as const;
+export type ModelInputCapability = (typeof MODEL_INPUT_CAPABILITIES)[number];
+
 export type JobKind = "audio" | "image" | "pdf" | "text";
 export type JobStatus =
   | "queued"
@@ -78,7 +81,7 @@ export interface WorkflowRun {
 }
 
 export interface ModuleActionDescriptor {
-  id: "summarize" | "translate" | "ground" | "redact" | "chat";
+  id: ModuleId;
   label: string;
   accepts: ArtifactKind[];
 }
@@ -103,6 +106,8 @@ export interface EndpointConfig {
   model: string;
   apiKey: string;
   enabled: boolean;
+  /** Declared model inputs. Currently used by the general-purpose LLM. */
+  capabilities?: ModelInputCapability[];
 }
 
 export interface Settings {

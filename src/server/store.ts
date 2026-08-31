@@ -697,11 +697,16 @@ export async function createChat(linkedJobId?: string): Promise<ChatRecord> {
   if (linkedJobId) {
     const job = await readJob(linkedJobId);
     chat.title = `Chat · ${job.title}`;
-    const source = await readPrimaryOutput(job);
+    if (settings.endpoints.llm.capabilities?.includes("image")) {
+      chat.linkedArtifactIds = job.artifacts
+        .filter((artifact) => ["source-image", "generated-image", "grounded-image"].includes(artifact.kind))
+        .map((artifact) => artifact.id);
+    }
+    const source = await readChatContext(job);
     chat.messages.push({
       id: randomUUID(),
       role: "system",
-      content: `Use the following SparklingKit job output as context. Answer accurately from it and say when the answer is absent.\n\n${source}`,
+      content: `Use the following SparklingKit job context. Answer accurately from it and say when the answer is absent. Compatible image artifacts are attached only when the configured language model accepts image input. If no image is attached, do not claim visual details that are not present in the prompt, annotations, or metadata.\n\n${source}`,
       createdAt: now,
     });
   }
@@ -750,6 +755,44 @@ export async function readPrimaryOutput(job: JobManifest) {
     if (await exists(full)) return fs.readFile(full, "utf8");
   }
   throw new Error("This job has no text output yet");
+}
+
+export async function readChatContext(job: JobManifest) {
+  try {
+    return await readPrimaryOutput(job);
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== "This job has no text output yet") throw error;
+  }
+
+  const sections: string[] = [
+    `Job: ${job.title}`,
+    `Module: ${job.moduleId || moduleForLegacyJob(job.type).moduleId}`,
+    `Status: ${job.stage}`,
+  ];
+  if (job.outputFiles.length) sections.push(`Generated files: ${job.outputFiles.join(", ")}`);
+  if (Object.keys(job.params).length) sections.push(`Parameters:\n${JSON.stringify(job.params, null, 2)}`);
+
+  const seen = new Set<string>();
+  const addTextFile = async (label: string, file: string) => {
+    if (seen.has(file) || !(await exists(file))) return;
+    seen.add(file);
+    const content = (await fs.readFile(file, "utf8")).trim();
+    if (!content) return;
+    const limit = 100_000;
+    sections.push(`${label}:\n${content.slice(0, limit)}${content.length > limit ? "\n[Context truncated]" : ""}`);
+  };
+
+  const textualKinds: ArtifactKind[] = ["text", "annotations", "structured-data", "subtitle"];
+  for (const artifact of job.artifacts.filter((item) => textualKinds.includes(item.kind) || item.mimeType.startsWith("text/"))) {
+    await addTextFile(artifact.name, safeArtifactPath(job.id, artifact.path));
+  }
+  for (const input of job.inputs.filter((item) => item.mimeType.startsWith("text/") || /\.(?:txt|md|html?|json)$/i.test(item.name))) {
+    await addTextFile(input.name, safeInputPath(job.id, input.storedName));
+  }
+  for (const output of job.outputFiles.filter((file) => /\.(?:txt|md|html?|json|srt|vtt)$/i.test(file))) {
+    await addTextFile(output, safeOutputPath(job.id, output));
+  }
+  return sections.join("\n\n");
 }
 
 export function safeOutputPath(id: string, relative: string) {

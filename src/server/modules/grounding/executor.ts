@@ -3,7 +3,7 @@ import path from "node:path";
 import { groundImage, type GroundingResult } from "../../ai.js";
 import { publishJob } from "../../events.js";
 import type { JobManifest, WorkflowRun } from "../../models.js";
-import { jobDir, readSettings, safeOutputPath, updateJob } from "../../store.js";
+import { readSettings, safeArtifactPath, safeOutputPath, updateJob } from "../../store.js";
 import type { WorkflowExecutionResult } from "../executors.js";
 
 const colors = ["#ff5a5f", "#39d98a", "#ffd166", "#7aa7ff", "#d58cff", "#4dd9e8", "#ff9f43", "#f368e0"];
@@ -42,13 +42,14 @@ export async function processGrounding(job: JobManifest, run: WorkflowRun, signa
   const settings = await readSettings();
   const endpoint = settings.endpoints.grounding;
   if (!endpoint.enabled || !endpoint.baseUrl || !endpoint.model) throw new Error("Configure and enable the Grounding service in Settings first");
-  const input = job.inputs[0];
-  if (!input) throw new Error("This grounding job has no source image");
+  const artifactId = typeof run.params.artifactId === "string" ? run.params.artifactId : run.inputArtifactIds[0];
+  const artifact = job.artifacts.find((candidate) => candidate.id === artifactId);
+  if (!artifact || !["source-image", "generated-image", "grounded-image"].includes(artifact.kind)) throw new Error("Choose an image artifact to search");
   const queries = Array.isArray(run.params.queries)
     ? [...new Set(run.params.queries.filter((query): query is string => typeof query === "string").map((query) => query.trim()).filter(Boolean))]
     : [];
   if (!queries.length) throw new Error("This grounding job has no search queries");
-  const sourceFile = path.join(jobDir(job.id), "input", input.storedName);
+  const sourceFile = safeArtifactPath(job.id, artifact.path);
   const results: Array<{ query: string; result: GroundingResult }> = [];
   const warnings: string[] = [];
   await report(job.id, { status: "preparing", progress: 6, stage: "Preparing image search", startedAt: run.startedAt || new Date().toISOString() });
@@ -63,16 +64,17 @@ export async function processGrounding(job: JobManifest, run: WorkflowRun, signa
   const dimensions = results[0]?.result;
   if (!dimensions) throw new Error("The grounding service returned no results");
   const sourceBytes = await fs.readFile(sourceFile);
-  const previewName = "grounding-preview.svg";
-  const annotationsName = "grounding.annotations.json";
+  const suffix = run.id.replace(/^run-/, "").slice(0, 8);
+  const previewName = job.outputFiles.includes("grounding-preview.svg") ? `grounding-preview-${suffix}.svg` : "grounding-preview.svg";
+  const annotationsName = job.outputFiles.includes("grounding.annotations.json") ? `grounding-${suffix}.annotations.json` : "grounding.annotations.json";
   const annotations = {
     schemaVersion: 1,
-    source: { name: input.name, storedName: input.storedName, width: dimensions.imageWidth, height: dimensions.imageHeight },
+    source: { name: artifact.name, artifactId: artifact.id, path: artifact.path, width: dimensions.imageWidth, height: dimensions.imageHeight },
     queries: results.map(({ query, result }, index) => ({ query, color: colors[index % colors.length], answer: result.answer, boxes: result.boxes, points: result.points })),
   };
   await Promise.all([
-    fs.writeFile(safeOutputPath(job.id, previewName), framedSvg(sourceBytes, sourceMime(input.storedName, input.mimeType), dimensions.imageWidth, dimensions.imageHeight, results), "utf8"),
+    fs.writeFile(safeOutputPath(job.id, previewName), framedSvg(sourceBytes, sourceMime(artifact.name, artifact.mimeType), dimensions.imageWidth, dimensions.imageHeight, results), "utf8"),
     fs.writeFile(safeOutputPath(job.id, annotationsName), `${JSON.stringify(annotations, null, 2)}\n`, "utf8"),
   ]);
-  return { outputFiles: [previewName, annotationsName], warnings };
+  return { outputFiles: [...new Set([...job.outputFiles, previewName, annotationsName])], warnings };
 }

@@ -15,6 +15,7 @@ export const defaultSettings: Settings = {
       model: process.env.LLM_MODEL || "qwen36-35b-a3b-nvfp4",
       apiKey: process.env.LLM_API_KEY || "",
       enabled: true,
+      capabilities: ["text"],
     },
     ocr: {
       baseUrl: process.env.OCR_BASE_URL || "http://192.0.2.10:8331/v1",

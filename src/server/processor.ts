@@ -10,10 +10,11 @@ import {
   readPrimaryOutput,
   readPrompt,
   readSettings,
+  safeArtifactPath,
   safeOutputPath,
   updateJob,
 } from "./store.js";
-import type { JobManifest, PromptPreset, Settings } from "./models.js";
+import type { JobManifest, PromptPreset, Settings, WorkflowRun } from "./models.js";
 
 interface AudioChunk { file: string; start: number; end: number }
 interface TranscriptResult { text: string; segments: TranscriptSegment[] }
@@ -229,20 +230,27 @@ function mergeOverlappingText(parts: string[]) {
   return merged.trim();
 }
 
-export async function processImages(job: JobManifest, signal?: AbortSignal) {
+export async function processImages(job: JobManifest, signal?: AbortSignal, run?: WorkflowRun) {
   const settings = await readSettings();
   const root = jobDir(job.id);
-  const checkpointsDir = path.join(root, "work", "ocr-images");
+  const selectedArtifacts = (run?.inputArtifactIds || [])
+    .map((id) => job.artifacts.find((artifact) => artifact.id === id))
+    .filter((artifact): artifact is NonNullable<typeof artifact> => Boolean(artifact && ["source-image", "generated-image", "grounded-image"].includes(artifact.kind)));
+  const images = selectedArtifacts.length
+    ? selectedArtifacts.map((artifact) => ({ name: artifact.name, file: safeArtifactPath(job.id, artifact.path) }))
+    : job.inputs.map((input) => ({ name: input.name, file: path.join(root, "input", input.storedName) }));
+  if (!images.length) throw new Error("Choose at least one image to read");
+  const checkpointsDir = path.join(root, "work", "ocr-images", run?.id || "initial");
   await fs.mkdir(checkpointsDir, { recursive: true });
   await progress(job.id, { status: "processing", progress: 5, stage: "Preparing images", startedAt: new Date().toISOString() });
   const pages: string[] = [];
   const warnings: string[] = [];
-  for (const [index, input] of job.inputs.entries()) {
+  for (const [index, input] of images.entries()) {
     await assertNotCancelled(job.id, signal);
     await progress(job.id, {
       status: "processing",
-      progress: 8 + Math.round((index / job.inputs.length) * 82),
-      stage: `Reading image ${index + 1} of ${job.inputs.length}`,
+      progress: 8 + Math.round((index / images.length) * 82),
+      stage: `Reading image ${index + 1} of ${images.length}`,
       detail: input.name,
     });
     try {
@@ -252,7 +260,7 @@ export async function processImages(job: JobManifest, signal?: AbortSignal) {
         markdown = (await fs.readFile(checkpoint, "utf8")).trim();
       } catch {
         markdown = await withRetries(settings.queue.maxRetriesPerChunk + 1, () =>
-          ocrImage(settings.endpoints.ocr, path.join(root, "input", input.storedName), `image ${index + 1}`, signal),
+          ocrImage(settings.endpoints.ocr, input.file, `image ${index + 1}`, signal),
         signal);
         await fs.writeFile(checkpoint, `${markdown}\n`);
       }
@@ -268,8 +276,10 @@ export async function processImages(job: JobManifest, signal?: AbortSignal) {
   if (!pages.some((page) => !page.startsWith("> Image"))) throw new Error(warnings.join("; "));
   await progress(job.id, { status: "merging", progress: 94, stage: "Assembling document", warnings });
   const document = pages.join("\n\n---\n\n");
-  await fs.writeFile(safeOutputPath(job.id, "document.md"), `# ${job.title}\n\n${document}\n`);
-  return { outputFiles: ["document.md"], warnings };
+  const baseName = "document.md";
+  const outputName = job.outputFiles.includes(baseName) ? `document.ocr-${(run?.id || "derived").replace(/^run-/, "").slice(0, 8)}.md` : baseName;
+  await fs.writeFile(safeOutputPath(job.id, outputName), `# ${job.title}\n\n${document}\n`);
+  return { outputFiles: [...new Set([...job.outputFiles, outputName])], warnings };
 }
 
 export async function processPdfs(job: JobManifest, signal?: AbortSignal) {

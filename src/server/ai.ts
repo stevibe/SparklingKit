@@ -185,7 +185,13 @@ function cleanAsrText(value: string) {
 
 export async function openChatStream(
   endpoint: EndpointConfig,
-  messages: Array<{ role: string; content: string }>,
+  messages: Array<{
+    role: string;
+    content: string | Array<
+      | { type: "text"; text: string }
+      | { type: "image_url"; image_url: { url: string } }
+    >;
+  }>,
   temperature: number,
   signal?: AbortSignal,
 ) {

@@ -16,7 +16,7 @@ type WorkflowExecutor = (
 // queue or orchestration layer.
 const executors: Record<string, WorkflowExecutor> = {
   "transcription.default": async (job, _run, signal) => (await import("../processor.js")).processAudio(job, signal),
-  "ocr.images": async (job, _run, signal) => (await import("../processor.js")).processImages(job, signal),
+  "ocr.images": async (job, run, signal) => (await import("../processor.js")).processImages(job, signal, run),
   "ocr.pdf": async (job, _run, signal) => (await import("../processor.js")).processPdfs(job, signal),
   "text-transform.preset": async (job, run, signal) => {
     const slug = typeof run.params.slug === "string" ? run.params.slug : "";
