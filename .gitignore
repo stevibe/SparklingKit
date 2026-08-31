@@ -1,0 +1,26 @@
+# Dependencies and package-manager state
+node_modules/
+.npm/
+
+# Generated builds and test output
+dist-client/
+dist-server/
+coverage/
+*.tsbuildinfo
+
+# Local runtime state: jobs, uploads, settings, and secrets
+data/
+
+# Environment files may contain service credentials
+.env
+.env.*
+!.env.example
+
+# Logs, editor state, and operating-system metadata
+*.log
+*.log.*
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo

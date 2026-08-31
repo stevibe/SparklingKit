@@ -1,0 +1,203 @@
+export const MODULE_IDS = ["ocr", "transcription", "translation", "grounding", "text-to-image", "chat"] as const;
+export type ModuleId = (typeof MODULE_IDS)[number];
+
+export const ENDPOINT_KINDS = ["stt", "ocr", "llm", "translation", "grounding", "image-generation"] as const;
+export type EndpointKind = (typeof ENDPOINT_KINDS)[number];
+
+export type JobKind = "audio" | "image" | "pdf" | "text";
+export type JobStatus =
+  | "queued"
+  | "preparing"
+  | "processing"
+  | "merging"
+  | "done"
+  | "done_with_warnings"
+  | "failed"
+  | "cancelled";
+
+export type ArtifactKind =
+  | "source-audio"
+  | "source-video"
+  | "source-image"
+  | "source-pdf"
+  | "document"
+  | "transcript"
+  | "subtitle"
+  | "translation"
+  | "annotations"
+  | "redacted-document"
+  | "grounded-image"
+  | "generated-image"
+  | "structured-data"
+  | "text";
+
+export type ArtifactRole = "source" | "primary" | "supplementary";
+
+export interface Artifact {
+  id: string;
+  name: string;
+  path: string;
+  kind: ArtifactKind;
+  mimeType: string;
+  role: ArtifactRole;
+  createdAt: string;
+  createdByRunId?: string;
+  createdByStepId?: string;
+  derivedFrom: string[];
+  metadata: Record<string, unknown>;
+}
+
+export interface WorkflowStepRun {
+  id: string;
+  title: string;
+  status: JobStatus;
+  progress: number;
+  startedAt?: string;
+  completedAt?: string;
+  error?: string;
+}
+
+export interface WorkflowRun {
+  id: string;
+  moduleId: ModuleId | "text-transform";
+  workflowId: string;
+  status: JobStatus;
+  progress: number;
+  stage: string;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  inputArtifactIds: string[];
+  outputArtifactIds: string[];
+  params: Record<string, unknown>;
+  steps: WorkflowStepRun[];
+  warnings: string[];
+  error?: string;
+  cancelRequested?: boolean;
+}
+
+export interface ModuleActionDescriptor {
+  id: "summarize" | "translate" | "ground" | "redact" | "chat";
+  label: string;
+  accepts: ArtifactKind[];
+}
+
+export interface ModuleDescriptor {
+  id: ModuleId;
+  title: string;
+  shortTitle: string;
+  description: string;
+  icon: "scan-text" | "audio-lines" | "languages" | "scan-search" | "image" | "message-circle";
+  route: string;
+  providerKind: EndpointKind;
+  accepts: ArtifactKind[];
+  produces: ArtifactKind[];
+  actions: ModuleActionDescriptor[];
+  implementation: "ready" | "planned";
+  configured?: boolean;
+}
+
+export interface EndpointConfig {
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+  enabled: boolean;
+}
+
+export interface Settings {
+  schemaVersion: 2;
+  endpoints: Record<EndpointKind, EndpointConfig>;
+  audio: {
+    chunkTargetSec: number;
+    chunkOverlapSec: number;
+    sampleRate: number;
+    maxCompletionTokens: number;
+    requestTimeoutSec: number;
+    adaptiveSplit: boolean;
+    minAdaptiveChunkSec: number;
+  };
+  pdf: {
+    dpi: number;
+    pagesPerBatch: number;
+  };
+  queue: {
+    workers: number;
+    maxRetriesPerChunk: number;
+  };
+  retention: { purgeWorkDirAfterDays: number };
+  ui: { language: string; theme: "light" | "dark" | "auto"; timezone: string };
+}
+
+export interface JobInput {
+  name: string;
+  storedName: string;
+  mimeType: string;
+  size: number;
+}
+
+export interface JobManifest {
+  schemaVersion: 2;
+  id: string;
+  /** Retained as a compatibility projection for v1 clients. */
+  type: JobKind;
+  moduleId: ModuleId;
+  workflowId: string;
+  status: JobStatus;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  title: string;
+  progress: number;
+  stage: string;
+  detail?: string;
+  inputs: JobInput[];
+  /** Retained as a compatibility projection of generated artifacts. */
+  outputFiles: string[];
+  artifacts: Artifact[];
+  runs: WorkflowRun[];
+  warnings: string[];
+  error?: string;
+  cancelRequested?: boolean;
+  params: Record<string, unknown>;
+}
+
+export interface PromptPreset {
+  name: string;
+  slug: string;
+  description: string;
+  system: string;
+  userTemplate: string;
+  params: { temperature: number; maxTokens: number };
+  chunking: { maxInputTokens: number; strategy: "single" | "map-reduce" };
+}
+
+export interface ChatMessage {
+  id: string;
+  role: "system" | "user" | "assistant";
+  content: string;
+  createdAt: string;
+}
+
+export interface ChatRecord {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  model: string;
+  temperature: number;
+  linkedJobId?: string;
+  linkedArtifactIds?: string[];
+  messages: ChatMessage[];
+}
+
+export interface EndpointHealth {
+  kind: EndpointKind;
+  enabled: boolean;
+  ok: boolean;
+  latencyMs: number;
+  model: string;
+  availableModels: string[];
+  error?: string;
+}

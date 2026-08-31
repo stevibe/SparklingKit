@@ -1,0 +1,46 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8787:8787"
+    volumes:
+      - ./data:/data
+    environment:
+      REDIS_URL: redis://redis:6379
+      DATA_DIR: /data
+      WORKER_ENABLED: "true"
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      OCR_BASE_URL: ${OCR_BASE_URL:-}
+      OCR_MODEL: ${OCR_MODEL:-}
+      OCR_API_KEY: ${OCR_API_KEY:-}
+      STT_BASE_URL: ${STT_BASE_URL:-}
+      STT_MODEL: ${STT_MODEL:-}
+      STT_API_KEY: ${STT_API_KEY:-}
+      TRANSLATION_BASE_URL: ${TRANSLATION_BASE_URL:-}
+      TRANSLATION_MODEL: ${TRANSLATION_MODEL:-}
+      TRANSLATION_API_KEY: ${TRANSLATION_API_KEY:-}
+      GROUNDING_BASE_URL: ${GROUNDING_BASE_URL:-}
+      GROUNDING_MODEL: ${GROUNDING_MODEL:-}
+      GROUNDING_API_KEY: ${GROUNDING_API_KEY:-}
+      IMAGE_GENERATION_BASE_URL: ${IMAGE_GENERATION_BASE_URL:-}
+      IMAGE_GENERATION_MODEL: ${IMAGE_GENERATION_MODEL:-}
+      IMAGE_GENERATION_API_KEY: ${IMAGE_GENERATION_API_KEY:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+  redis:
+    image: redis:8-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+    restart: unless-stopped
+volumes:
+  redis-data:

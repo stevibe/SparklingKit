@@ -1,0 +1,14 @@
+node_modules
+dist-client
+dist-server
+coverage
+data
+.git
+.env
+.env.*
+!.env.example
+*.log
+*.log.*
+.DS_Store
+.idea
+.vscode
