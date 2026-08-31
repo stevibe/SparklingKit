@@ -18,6 +18,7 @@
 html { background: var(--color-canvas); font-size: 16px; }
 body { margin: 0; min-width: 320px; min-height: 100vh; color: var(--color-ink); font-family: var(--font-sans); font-size: 15px; -webkit-font-smoothing: antialiased; }
 button, input, textarea, select { font: inherit; }
+textarea { font-size: 16px; }
 button, a { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(232,234,237,.28); outline-offset: 2px; }
 
@@ -131,7 +132,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .spinner.dark { @apply border-[#c7d1df] border-t-[#0b57d0]; }
 .field-label { @apply text-[14px] font-bold text-[#3c4043]; }
 .input { @apply block w-full rounded-xl border border-[#c9ced7] bg-white px-3.5 py-3 text-[14px] font-normal text-ink transition placeholder:text-[#8a9098] focus:border-[#0b57d0]; box-shadow: inset 0 1px 2px rgba(32,33,36,.05); }
-textarea.input { resize: vertical; }
+textarea.input { @apply text-[16px]; resize: vertical; }
 .select-wrap { @apply relative mt-2 flex items-center; }
 .select-wrap select { @apply h-11 w-full appearance-none rounded-xl border border-[#c7ccd5] bg-white py-2 pr-10 pl-3.5 text-[14px] font-semibold text-ink; box-shadow: inset 0 1px 2px rgba(32,33,36,.04); }
 .select-wrap svg { @apply pointer-events-none absolute right-3 text-muted; }
@@ -236,6 +237,13 @@ textarea.input { resize: vertical; }
 .file-type-audio, .file-type-video { @apply bg-[#e6f4ea] text-[#137333]; }
 .file-tree-empty { @apply mx-2 my-3 flex items-center gap-2 rounded-xl border border-dashed border-[#c9ced6] p-3 text-[14px] font-medium text-muted; }
 .file-tree-divider { @apply my-3 border-t border-line; }
+.job-chat-link { @apply mb-1 flex min-w-0 items-center gap-2.5 rounded-[12px] border border-transparent px-2.5 py-2.5 text-left transition hover:bg-[#e9eef6]; }
+.job-chat-icon { @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-[#e8f0fe] text-[#0b57d0]; }
+.job-chat-link > span:nth-child(2) { @apply min-w-0 flex-1; }
+.job-chat-link strong, .job-chat-link small { @apply block truncate; }
+.job-chat-link strong { @apply text-[14px] font-bold text-ink; }
+.job-chat-link small { @apply mt-0.5 text-[14px] font-medium text-muted; }
+.job-chat-link > svg { @apply shrink-0 text-muted; }
 .source-file-row { @apply relative; }
 .mobile-source-files { @apply hidden; }
 .file-row-actions { @apply absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-0.5; }
@@ -319,6 +327,16 @@ textarea.input { resize: vertical; }
 .chat-header-skeleton { @apply flex w-44 flex-col gap-2; }
 .chat-header-skeleton span:first-child { @apply h-4 w-full rounded-md; }
 .chat-header-skeleton span:last-child { @apply h-2.5 w-2/3 rounded-md; }
+.chat-reference-banner { @apply relative z-10 flex min-h-20 shrink-0 items-center gap-3 border-b border-[#46505b] bg-[#20252b] px-5 py-3 text-ink transition hover:bg-[#272d34] sm:px-7; box-shadow: 0 5px 18px rgba(0,0,0,.22), inset 4px 0 #d7dce2; }
+.chat-reference-banner.unavailable { @apply border-[#4b3638] bg-[#20191b] text-muted; box-shadow: inset 4px 0 #a85e64; }
+.chat-reference-icon { @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-[#353c45] text-[#f1f3f4]; }
+.chat-reference-copy { @apply flex min-w-0 flex-1 items-center gap-4; }
+.chat-reference-copy > span { @apply min-w-0; }
+.chat-reference-copy strong, .chat-reference-copy small, .chat-reference-copy b { @apply block; }
+.chat-reference-copy strong { @apply text-[15px] font-extrabold; }
+.chat-reference-copy small { @apply mt-0.5 text-[12px] font-medium text-[#adb4bd]; }
+.chat-reference-copy b { @apply min-w-0 truncate text-[14px] font-semibold text-[#e0e4e9]; }
+.chat-reference-open { @apply flex shrink-0 items-center gap-2 text-[13px] font-bold text-[#d7dce2]; }
 .chat-messages { @apply flex-1 overflow-y-auto bg-[#fbfcfe] px-4 py-8 sm:px-8 lg:px-10; }
 .chat-loading { @apply mx-auto w-full max-w-5xl space-y-9 pt-3; }
 .chat-loading-row { @apply flex items-start gap-3; }
@@ -338,8 +356,17 @@ textarea.input { resize: vertical; }
 .avatar { @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px]; }
 .avatar-ai { @apply bg-[#e8f0fe] text-[#0b57d0]; }
 .avatar-user { @apply bg-[#3c4043] text-white; }
-.message-content { @apply min-w-0 max-w-[88%] pt-0.5 text-[17px] leading-[1.78] text-[#303134]; overflow-wrap: anywhere; }
-.message-row:not(.message-user) .message-content { @apply flex-1 max-w-none; }
+.message-body { @apply flex min-w-0 max-w-[88%] flex-col items-start; }
+.message-user .message-body { @apply items-end; }
+.message-row:not(.message-user) .message-body { @apply flex-1 max-w-none; }
+.message-content { @apply min-w-0 max-w-full pt-0.5 text-[17px] leading-[1.78] text-[#303134]; overflow-wrap: anywhere; }
+.message-row:not(.message-user) .message-content { @apply w-full; }
+.message-actions { @apply mt-1.5 flex min-h-8 items-center gap-1.5 text-[12px] text-muted; }
+.message-user .message-actions { @apply flex-row-reverse; }
+.message-actions time { @apply inline-flex h-8 items-center whitespace-nowrap leading-none; }
+.message-copy-button { @apply inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-[9px] border-0 bg-transparent px-2 text-[12px] leading-none font-semibold text-muted opacity-65 transition hover:bg-[#eef1f5] hover:text-ink hover:opacity-100; }
+.message-copy-button.copied { @apply text-emerald-700 opacity-100; }
+.message-copy-button.failed { @apply text-red-700 opacity-100; }
 .message-content > :first-child { margin-top: 0; }
 .message-content > :last-child { margin-bottom: 0; }
 .message-content p { @apply my-4; }
@@ -381,7 +408,7 @@ textarea.input { resize: vertical; }
 .chat-composer-wrap { @apply sticky bottom-0 z-10 shrink-0 bg-[#fbfcfe]/95 px-4 pt-3 pb-4 backdrop-blur sm:px-8; }
 .chat-composer-wrap > p { @apply mt-2 text-center text-[14px] text-muted; }
 .chat-composer { @apply mx-auto flex max-w-5xl items-end gap-2 rounded-[20px] border border-[#cbd1da] bg-white p-2.5; box-shadow: 0 5px 18px rgba(32,33,36,.14); }
-.chat-composer textarea { @apply max-h-44 min-h-10 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2 text-[17px] leading-7 outline-none placeholder:text-[#8b9198]; }
+.chat-composer textarea { @apply max-h-44 min-h-10 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2 text-[16px] leading-7 outline-none placeholder:text-[#8b9198]; }
 .send-button { @apply flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#0b57d0] text-white transition hover:bg-[#0842a0] disabled:bg-[#d9dde3] disabled:text-[#8b9198]; box-shadow: 0 1px 3px rgba(11,87,208,.25); }
 /* Settings */
 .settings-modal-backdrop { @apply fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-5 backdrop-blur-[5px]; }
@@ -639,10 +666,10 @@ select option { background: #15181d; color: #eef0f2; }
 .workbench-language-bar { @apply mt-5 grid grid-cols-[minmax(0,1fr)_36px_minmax(0,1fr)] items-end gap-2; }
 .workbench-language-bar .translation-flip { @apply mt-0 h-9 w-9 self-end; }
 .workbench-translation-panes { @apply mt-3 grid flex-1 grid-cols-2 overflow-hidden rounded-[15px] border border-[#363c45] bg-[#101216]; min-height: 180px; }
-.workbench-translation-panes textarea { @apply min-h-44 resize-none bg-transparent p-4 text-[14px] leading-6 text-ink outline-none placeholder:text-[#737b86]; }
+.workbench-translation-panes textarea { @apply min-h-44 resize-none bg-transparent p-4 text-[16px] leading-7 text-ink outline-none placeholder:text-[#737b86]; }
 .workbench-translation-panes textarea + textarea { @apply border-l border-line bg-[#13161a]; }
 .workbench-translation-panes textarea.updating { @apply text-[#aeb4bd]; }
-.workbench-prompt { @apply mt-5 min-h-32 w-full resize-none rounded-[15px] border border-[#363c45] bg-[#101216] p-4 text-[14px] leading-6 text-ink outline-none transition placeholder:text-[#737b86] focus:border-[#cbd0d6]; }
+.workbench-prompt { @apply mt-5 min-h-32 w-full resize-none rounded-[15px] border border-[#363c45] bg-[#101216] p-4 text-[16px] leading-7 text-ink outline-none transition placeholder:text-[#737b86] focus:border-[#cbd0d6]; }
 .image-size-options { @apply mt-3 grid grid-cols-3 gap-2; }
 .image-size-options button { @apply flex min-w-0 cursor-pointer items-center gap-2.5 rounded-[13px] border border-[#343a43] bg-[#181b20] px-3 py-3 text-left text-muted transition hover:border-[#59616c] hover:bg-[#20242a]; }
 .image-size-options button.active { @apply border-[#737b86] bg-[#292e35] text-ink; }
@@ -656,7 +683,7 @@ select option { background: #15181d; color: #eef0f2; }
 .canvas-2-3 { width: 14px; height: 21px; }
 .workbench-chat-card { @apply min-h-56; }
 .workbench-chat-composer { @apply relative mt-5 flex min-h-24 items-end rounded-[16px] border border-[#3a414a] bg-[#101216] p-2.5 transition focus-within:border-[#cbd0d6]; }
-.workbench-chat-composer textarea { @apply min-h-16 flex-1 resize-none bg-transparent px-2 py-1.5 text-[14px] leading-5 text-ink outline-none placeholder:text-[#737b86]; }
+.workbench-chat-composer textarea { @apply min-h-16 flex-1 resize-none bg-transparent px-2 py-1.5 text-[16px] leading-6 text-ink outline-none placeholder:text-[#737b86]; }
 .workbench-chat-composer .send-button { @apply h-9 w-9 shrink-0; }
 .workbench-grounding-link { @apply grid min-h-32 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3.5 p-4 text-ink transition hover:bg-[#181c20]; }
 .workbench-grounding-link strong { @apply min-w-0 font-display text-[15px] font-bold tracking-[-.02em]; }
@@ -713,6 +740,8 @@ select option { background: #15181d; color: #eef0f2; }
 .file-type-pdf { background: #351b1e; color: #ff9b98; }
 .file-type-audio, .file-type-video { background: #142a22; color: #72d9a4; }
 .file-tree-empty { border-color: #3a4049; }
+.job-chat-link:hover { background: #1d2127; }
+.job-chat-icon { background: #202a35; color: #c5d9f0; }
 .source-file { color: #a7adb5; }
 .source-file:hover { background: #1d2127; }
 .source-file.active { border-color: #414852; background: #292e35; color: #f1f3f4; }
@@ -755,6 +784,9 @@ select option { background: #15181d; color: #eef0f2; }
 .message-table-wrap th { background: #20242a; }
 .message-table-wrap tbody tr:nth-child(even) { background: rgba(255, 255, 255, .018); }
 .message-bubble { background: #2a2f36; color: #f1f3f4; }
+.message-copy-button:hover { background: #24292f; color: #f1f3f4; }
+.message-copy-button.copied { color: #73dfa9; }
+.message-copy-button.failed { color: #ffaaa5; }
 .thinking { background: #252a31; }
 .cursor { background: #f1f3f4; }
 .chat-composer-wrap { background: rgba(11, 13, 16, .94); }
@@ -883,7 +915,7 @@ select option { background: #15181d; color: #eef0f2; }
 .language-quick-list button.active { @apply border-[#737b86] bg-[#30353d] text-ink; }
 .quick-translation-grid { @apply grid items-stretch gap-3 lg:grid-cols-[minmax(0,1fr)_44px_minmax(0,1fr)]; }
 .translation-pane { @apply flex min-h-[390px] min-w-0 flex-col rounded-[16px] border border-[#343a43] bg-[#101318] p-4; }
-.translation-pane textarea { @apply mt-4 min-h-52 flex-1 resize-none bg-transparent text-[17px] leading-8 text-ink outline-none placeholder:text-[#6f7680]; }
+.translation-pane textarea { @apply mt-4 min-h-52 flex-1 resize-none bg-transparent text-[16px] leading-8 text-ink outline-none placeholder:text-[#6f7680]; }
 .translation-pane textarea.updating { @apply text-[#aeb4bd]; }
 .translation-pane > small { @apply text-[14px] font-medium text-muted; }
 .translation-pane > a { @apply mt-2 flex items-center gap-1.5 self-end text-[14px] font-bold text-muted hover:text-ink; }
@@ -900,9 +932,9 @@ select option { background: #15181d; color: #eef0f2; }
 .grounding-dropzone-copy strong, .grounding-dropzone-copy small { @apply block truncate; }
 .grounding-dropzone-copy strong { @apply text-[14px] font-bold text-ink; }
 .grounding-dropzone-copy small { @apply mt-1 text-[14px] font-medium text-muted; }
-.grounding-query-input { @apply min-h-36 text-[15px] leading-7; }
+.grounding-query-input { @apply min-h-36 text-[16px] leading-7; }
 .grounding-query-help { @apply mt-2 block text-[14px] font-medium text-muted; }
-.image-prompt-input { @apply min-h-40 text-[15px] leading-6; }
+.image-prompt-input { @apply min-h-40 text-[16px] leading-7; }
 .generated-image-preview { @apply flex min-h-[580px] items-center justify-center rounded-[14px] bg-[#0c0e11] p-4 sm:p-7; }
 .generated-image-preview img { @apply block max-w-full rounded-[10px] object-contain; max-height: calc(100vh - 230px); box-shadow: 0 12px 40px rgba(0,0,0,.42); }
 .endpoint-translation { background: #282238 !important; color: #d2b6f5 !important; }
@@ -1069,6 +1101,13 @@ select option { background: #15181d; color: #eef0f2; }
   .chat-list.hidden, .chat-pane.hidden { display: none; }
   .chat-pane { @apply h-full; }
   .chat-header { @apply h-15 px-3; }
+  .chat-reference-banner { @apply min-h-0 gap-2.5 px-3.5 py-3; }
+  .chat-reference-icon { @apply h-10 w-10 rounded-[12px]; }
+  .chat-reference-copy { @apply block; }
+  .chat-reference-copy strong { @apply text-[14px]; }
+  .chat-reference-copy small { @apply hidden; }
+  .chat-reference-copy b { @apply mt-0.5 text-[13px]; }
+  .chat-reference-open { @apply h-9 w-9 items-center justify-center rounded-full border border-[#454d57]; font-size: 0; }
   .chat-messages { @apply px-3.5 py-5; }
   .chat-reading-column { @apply space-y-7; }
   .message-row { @apply gap-2.5; }
@@ -1108,6 +1147,9 @@ select option { background: #15181d; color: #eef0f2; }
   .output-files-list .file-tree-row.nested { @apply ml-0; }
   .output-files-list .file-tree-item { @apply h-17 pr-3 pl-2.5; }
   .output-files-list .row-delete-button { @apply hidden; }
+  .job-chat-section .file-tree-divider { @apply my-2; }
+  .job-chat-section .file-group-label { @apply pt-1; }
+  .job-chat-link { @apply min-h-15; }
   .source-files-desktop, .file-sidebar-footer { @apply hidden; }
   .mobile-source-files { @apply mt-2 block border-t border-line pt-2; }
   .mobile-source-files summary { @apply flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-[11px] px-2.5 text-[14px] font-bold text-muted; }

@@ -4,9 +4,10 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ArrowLeft, ArrowRight, Braces, Check, ChevronDown, Code2, Copy, Download, ExternalLink, File, FileAudio, FileJson, FileText, FileVideo, FolderOpen, Image as ImageIcon, Languages, LoaderCircle, MessageCircle, PanelLeft, Pencil, ScanSearch, ScanText, Square, Subtitles, Trash2, TriangleAlert } from "lucide-react";
 import { api } from "../api";
+import { writeClipboardText } from "../clipboard";
 import { ConfirmDialog, JobIcon, Progress, RenameDialog, StatusBadge, cn, formatBytes, timeAgo } from "../components/ui";
 import { compatibleModuleContracts, moduleHandoffUrl } from "../../shared/module-router";
-import type { Job, ModuleDescriptor, ModuleId, PromptPreset } from "../types";
+import type { Chat, Job, ModuleDescriptor, ModuleId, PromptPreset } from "../types";
 
 type PreviewMode = "rendered" | "source";
 type DeleteTarget =
@@ -40,14 +41,17 @@ export function JobPage() {
   const [renameError, setRenameError] = useState("");
   const [stopping, setStopping] = useState(false);
   const [openingChat, setOpeningChat] = useState(false);
+  const [linkedChats, setLinkedChats] = useState<Chat[]>([]);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedArtifactId = searchParams.get("artifact") || "";
 
   useEffect(() => {
+    setLinkedChats([]);
     api.job(id).then(setJob).catch((value) => setError(value.message));
     api.prompts().then(setPrompts).catch(() => undefined);
     api.modules().then(setModules).catch(() => undefined);
+    api.chats().then((chats) => setLinkedChats(linkedChatsForJob(chats, id))).catch(() => undefined);
     const events = new EventSource(`/api/jobs/${id}/events`);
     events.onmessage = (event) => setJob(JSON.parse(event.data) as Job);
     return () => events.close();
@@ -239,6 +243,7 @@ export function JobPage() {
           <p className="file-group-label">Generated output</p>
           <div className="output-files-list">{outputFiles.map((file) => <div className={cn("file-tree-row", file.includes("/") && "nested")} key={file}><button className={cn("file-tree-item", selectedScope === "output" && selectedFile === file && "active")} onClick={() => selectWorkspaceFile("output", file)}><FileTypeIcon file={file} /><span><strong>{displayOutputName(file)}</strong><small>{describeOutput(file)}</small></span></button><button className="row-delete-button" onClick={() => askToDelete({ kind: "output", file, label: displayOutputName(file) })} disabled={running} aria-label={"Delete " + displayOutputName(file)} title={running ? "Files cannot be deleted while processing" : "Delete output file"}><Trash2 size={14} /></button></div>)}</div>
           {!outputFiles.length && <div className="file-tree-empty"><FolderOpen size={22} /><span>Outputs will appear here</span></div>}
+          {!!linkedChats.length && <div className="job-chat-section"><div className="file-tree-divider" /><p className="file-group-label">Chat</p>{linkedChats.map((linkedChat) => <Link className="job-chat-link" to={`/chat/${encodeURIComponent(linkedChat.id)}`} key={linkedChat.id}><span className="job-chat-icon"><MessageCircle size={17} /></span><span><strong>{linkedChat.title}</strong><small>Conversation · {timeAgo(linkedChat.updatedAt)}</small></span><ArrowRight size={15} /></Link>)}</div>}
           <div className="source-files-desktop"><div className="file-tree-divider" /><p className="file-group-label">Source files</p>{sourceFileRows}</div>
           <details className="mobile-source-files"><summary><span><File size={16} />Source files</span><small>{job.inputs.length}</small><ChevronDown size={16} /></summary><div>{sourceFileRows}</div></details>
         </div>
@@ -260,6 +265,10 @@ export function JobPage() {
     <RenameDialog open={Boolean(renameTarget)} title={renameDialogTitle} label={renameTarget?.kind === "job" ? "Job name" : "File name"} value={renameValue} helper={renamedExtension ? `The ${renamedExtension} extension will be preserved.` : undefined} busy={renaming} error={renameError} onChange={setRenameValue} onCancel={() => !renaming && setRenameTarget(undefined)} onConfirm={confirmRename} />
     <ConfirmDialog open={Boolean(deleteTarget)} title={deleteTitle} description={deleteDescription} busy={deleting} error={deleteError} onCancel={() => !deleting && setDeleteTarget(undefined)} onConfirm={confirmDelete} />
   </div>;
+}
+
+export function linkedChatsForJob(chats: Chat[], jobId: string) {
+  return chats.filter((chat) => chat.linkedJobId === jobId);
 }
 
 function FlowActionIcon({ moduleId }: { moduleId: ModuleId }) {
@@ -412,23 +421,4 @@ function fileUrl(jobId: string, file: string) {
 
 function inputFileUrl(jobId: string, file: string) {
   return `/api/jobs/${jobId}/input/${encodeURIComponent(file)}`;
-}
-
-async function writeClipboardText(value: string) {
-  if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(value);
-      return;
-    } catch { /* fall through to the legacy browser path */ }
-  }
-  const textarea = document.createElement("textarea");
-  textarea.value = value;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  const copied = document.execCommand("copy");
-  textarea.remove();
-  if (!copied) throw new Error("Clipboard access was denied");
 }

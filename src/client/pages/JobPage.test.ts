@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { extractHtml, getFileKind, htmlDocument, markdownForPreview } from "./JobPage";
+import { extractHtml, getFileKind, htmlDocument, linkedChatsForJob, markdownForPreview } from "./JobPage";
+import type { Chat } from "../types";
 
 describe("job output preview", () => {
   it("detects a complete HTML document inside a Markdown output", () => {
@@ -36,5 +37,16 @@ describe("job output preview", () => {
     expect(getFileKind("source.png")).toBe("image");
     expect(getFileKind("recording.wav")).toBe("audio");
     expect(getFileKind("recording.mp4")).toBe("video");
+  });
+});
+
+describe("job chat backlinks", () => {
+  it("keeps only conversations linked to the current job", () => {
+    const chats = [
+      { id: "chat-a", linkedJobId: "job-a" },
+      { id: "chat-b", linkedJobId: "job-b" },
+      { id: "chat-c", linkedJobId: "job-a" },
+    ] as Chat[];
+    expect(linkedChatsForJob(chats, "job-a").map((chat) => chat.id)).toEqual(["chat-a", "chat-c"]);
   });
 });
