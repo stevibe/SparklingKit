@@ -68,8 +68,10 @@ export function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"general" | "services" | "processing" | "prompts">("general");
+  const [selectedService, setSelectedService] = useState<EndpointKind>();
   const [editingPrompt, setEditingPrompt] = useState<PromptPreset>();
   const activeSection = settingsSections.find((section) => section.key === tab)!;
+  const selectedServiceMeta = selectedService ? endpointMeta[selectedService] : undefined;
 
   function close() {
     const hasBackground = Boolean((location.state as { backgroundLocation?: unknown } | null)?.backgroundLocation);
@@ -94,11 +96,17 @@ export function SettingsPage() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (editingPrompt) setEditingPrompt(undefined);
+      else if (selectedService) setSelectedService(undefined);
       else close();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [editingPrompt, location.state]);
+  }, [editingPrompt, location.state, selectedService]);
+
+  function selectSection(section: typeof tab) {
+    setTab(section);
+    setSelectedService(undefined);
+  }
 
   async function save() {
     if (!settings) return;
@@ -142,15 +150,18 @@ export function SettingsPage() {
         <nav className="settings-nav" aria-label="Settings categories">
           <div className="settings-modal-nav-head"><button className="settings-close-button" onClick={close} aria-label="Close settings"><X size={22} /></button></div>
           <p className="settings-nav-label">Categories</p>
-          <div className="settings-nav-list">{settingsSections.map(({ key, label, description, icon: Icon }) => <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key)} aria-current={tab === key ? "page" : undefined}><Icon size={18} /><span><strong>{label}</strong><small>{description}</small></span></button>)}</div>
+          <div className="settings-nav-list">{settingsSections.map(({ key, label, description, icon: Icon }) => <button key={key} className={tab === key ? "active" : ""} onClick={() => selectSection(key)} aria-current={tab === key ? "page" : undefined}><Icon size={18} /><span><strong>{label}</strong><small>{description}</small></span></button>)}</div>
         </nav>
 
         <main className="settings-panel">
           <header className="settings-dialog-header">
-            <div><h1 id="settings-title">{activeSection.title}</h1><p>{activeSection.description}</p></div>
+            <div className="settings-dialog-title">
+              {selectedService && <button className="settings-level-back" onClick={() => setSelectedService(undefined)} aria-label="Back to model services"><ChevronRight size={20} /></button>}
+              <div><h1 id="settings-title">{selectedServiceMeta?.title || activeSection.title}</h1><p>{selectedServiceMeta?.caption || activeSection.description}</p></div>
+            </div>
             <div className="settings-dialog-actions">
               {tab === "prompts" && <button className="button-secondary" onClick={() => setEditingPrompt(blankPrompt())}><Plus size={16} />New preset</button>}
-              {tab !== "prompts" && settings && <button className="button-primary" onClick={save}>{saved ? <><Check size={16} />Saved</> : <><Save size={16} />Save changes</>}</button>}
+              {tab !== "prompts" && !(tab === "services" && !selectedService) && settings && <button className="button-primary" onClick={save}>{saved ? <><Check size={16} />Saved</> : <><Save size={16} />Save changes</>}</button>}
             </div>
           </header>
           {error && <div className="error-card settings-error"><CircleAlert size={18} />{error}</div>}
@@ -160,28 +171,38 @@ export function SettingsPage() {
               <div className="settings-value-row"><span><strong>Time zone</strong><small>Used when naming new job and conversation folders. Existing work is not renamed.</small></span><span className="timezone-setting-control"><span className="select-wrap"><select value={settings.ui.timezone} onChange={(event) => setSettings({ ...settings, ui: { ...settings.ui, timezone: event.target.value } })}>{!["UTC", ...timezoneOptions].includes(settings.ui.timezone) && <option value={settings.ui.timezone}>{settings.ui.timezone}</option>}<option value="UTC">UTC</option>{timezoneOptions.filter((timezone) => timezone !== "UTC").map((timezone) => <option value={timezone} key={timezone}>{timezone.replaceAll("_", " ")}</option>)}</select><ChevronDown size={16} /></span><button className="button-secondary compact" onClick={() => setSettings({ ...settings, ui: { ...settings.ui, timezone: browserTimezone } })}>Use device time zone</button></span></div>
             </div><p className="settings-footnote">This device reports <strong>{browserTimezone.replaceAll("_", " ")}</strong>.</p></div>
           </section>}
-          {tab === "services" && <section>
-            <div className="settings-group-stack">{(["stt", "ocr", "llm", "translation", "grounding", "image-generation"] as EndpointKind[]).map((kind) => {
-              const meta = endpointMeta[kind]; const endpoint = settings.endpoints[kind]; const result = tests[kind]; const Icon = meta.icon;
-              return <section className="settings-group" key={kind}>
-                <header className="settings-group-heading"><div className="settings-group-identity"><span className={meta.tint}><Icon size={18} /></span><div><h3>{meta.title}</h3><p>{meta.caption}</p></div></div><div className="settings-group-actions">{result && result !== "testing" && <span className={cn("status-badge", result.ok ? "status-done" : "status-failed")}>{result.ok ? `${result.latencyMs} ms` : result.enabled ? "Offline" : "Disabled"}</span>}<label className={cn("settings-toggle", endpoint.enabled && "active")} title={`Enable ${meta.title}`}><input type="checkbox" checked={endpoint.enabled} onChange={(event) => setSettings({ ...settings, endpoints: { ...settings.endpoints, [kind]: { ...endpoint, enabled: event.target.checked } } })} /><i /></label><button className="button-secondary compact" onClick={() => test(kind)} disabled={result === "testing" || !endpoint.enabled}>{result === "testing" ? <><LoaderCircle size={15} className="animate-spin" /><span>Testing</span></> : <><span className="test-label-full">Test connection</span><span className="test-label-short">Test</span></>}</button></div></header>
+          {tab === "services" && !selectedService && <section className="settings-section-block">
+            <h3>Available services</h3>
+            <div className="settings-group settings-service-list">{(["stt", "ocr", "llm", "translation", "grounding", "image-generation"] as EndpointKind[]).map((kind) => {
+              const meta = endpointMeta[kind]; const endpoint = settings.endpoints[kind]; const Icon = meta.icon;
+              const configured = Boolean(endpoint.baseUrl && endpoint.model);
+              const state = !endpoint.enabled ? "Disabled" : configured ? "Enabled" : "Needs setup";
+              return <button className="settings-service-row" key={kind} onClick={() => setSelectedService(kind)}>
+                <span className={meta.tint}><Icon size={18} /></span>
+                <span className="settings-service-copy"><strong>{meta.title}</strong><small>{meta.caption}</small></span>
+                <span className="settings-service-summary"><strong>{endpoint.model || "No model selected"}</strong><small className={cn(endpoint.enabled && configured ? "ready" : endpoint.enabled ? "warning" : "")}>{state}</small></span>
+                <ChevronRight size={18} />
+              </button>;
+            })}</div>
+            <p className="settings-footnote">Select a service to configure its endpoint, model, availability, and supported inputs.</p>
+          </section>}
+
+          {tab === "services" && selectedService && (() => {
+            const kind = selectedService; const meta = endpointMeta[kind]; const endpoint = settings.endpoints[kind]; const result = tests[kind]; const Icon = meta.icon;
+            return <section className="settings-service-detail">
+              <div className="settings-section-block"><h3>Connection</h3><div className="settings-group">
+                <div className="settings-service-enable-row"><div className="settings-group-identity"><span className={meta.tint}><Icon size={18} /></span><div><h3>Service availability</h3><p>Allow SparklingKit to use this endpoint.</p></div></div><div className="settings-group-actions">{result && result !== "testing" && <span className={cn("status-badge", result.ok ? "status-done" : "status-failed")}>{result.ok ? `${result.latencyMs} ms` : result.enabled ? "Offline" : "Disabled"}</span>}<label className={cn("settings-toggle", endpoint.enabled && "active")} title={`Enable ${meta.title}`}><input type="checkbox" checked={endpoint.enabled} onChange={(event) => setSettings({ ...settings, endpoints: { ...settings.endpoints, [kind]: { ...endpoint, enabled: event.target.checked } } })} /><i /></label><button className="button-secondary compact" onClick={() => test(kind)} disabled={result === "testing" || !endpoint.enabled}>{result === "testing" ? <><LoaderCircle size={15} className="animate-spin" /><span>Testing</span></> : <><span className="test-label-full">Test connection</span><span className="test-label-short">Test</span></>}</button></div></div>
                 <div className="settings-control-grid">
                   <label className="field-label settings-control-wide">Base URL<input className="input mt-2" value={endpoint.baseUrl} onChange={(event) => endpointChange(kind, "baseUrl", event.target.value)} /></label>
                   <label className="field-label">Model<input className="input mt-2" value={endpoint.model} onChange={(event) => endpointChange(kind, "model", event.target.value)} /></label>
                   <label className="field-label settings-control-full">API key <span className="font-normal text-muted">(optional)</span><span className="relative mt-2 block"><input className="input pr-11" type={showKeys[kind] ? "text" : "password"} value={endpoint.apiKey} placeholder="Not required for local endpoints" onChange={(event) => endpointChange(kind, "apiKey", event.target.value)} /><button className="settings-secret-toggle" onClick={() => setShowKeys((value) => ({ ...value, [kind]: !value[kind] }))} type="button" aria-label={showKeys[kind] ? "Hide API key" : "Show API key"}>{showKeys[kind] ? <EyeOff size={16} /> : <Eye size={16} />}</button></span></label>
                 </div>
-                {kind === "llm" && <div className="settings-capabilities">
-                  <div><strong>Accepted inputs</strong><small>Controls which linked materials SparklingKit may send to this model.</small></div>
-                  <div className="settings-capability-options">
-                    <label><input type="checkbox" checked disabled /><span><strong>Text</strong><small>Required for chat</small></span></label>
-                    <label><input type="checkbox" checked={endpoint.capabilities?.includes("image") || false} onChange={(event) => endpointCapabilityChange(kind, "image", event.target.checked)} /><span><strong>Images</strong><small>OpenAI-compatible image input</small></span></label>
-                  </div>
-                </div>}
+                {kind === "llm" && <div className="settings-capabilities"><div><strong>Accepted inputs</strong><small>Controls which linked materials SparklingKit may send to this model.</small></div><div className="settings-capability-options"><label><input type="checkbox" checked disabled /><span><strong>Text</strong><small>Required for chat</small></span></label><label><input type="checkbox" checked={endpoint.capabilities?.includes("image") || false} onChange={(event) => endpointCapabilityChange(kind, "image", event.target.checked)} /><span><strong>Images</strong><small>OpenAI-compatible image input</small></span></label></div></div>}
                 {result && result !== "testing" && !result.ok && <p className="settings-inline-error">{result.error}</p>}
                 {result && result !== "testing" && result.ok && result.availableModels.length > 0 && !result.availableModels.includes(endpoint.model) && <p className="settings-inline-warning">Connected, but the configured model was not advertised. Available: {result.availableModels.join(", ")}</p>}
-              </section>;
-            })}</div>
-          </section>}
+              </div><p className="settings-footnote">Changes take effect after you save. Connection tests use the values currently shown above.</p></div>
+            </section>;
+          })()}
 
           {tab === "processing" && <section>
             <div className="settings-section-block"><h3>Transcription processing</h3><div className="settings-group settings-processing-group">

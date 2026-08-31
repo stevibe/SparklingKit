@@ -361,6 +361,10 @@ textarea.input { resize: vertical; }
 .settings-nav-list button.active { @apply bg-white text-ink; box-shadow: 0 1px 3px rgba(32,33,36,.12); }
 .settings-panel { @apply min-h-0 min-w-0 overflow-y-auto px-7 pb-7; }
 .settings-dialog-header { @apply sticky top-0 z-10 flex min-h-24 items-center justify-between gap-5 border-b border-line bg-white/95 py-5 backdrop-blur; }
+.settings-dialog-title { @apply flex min-w-0 items-center gap-3; }
+.settings-dialog-title > div { @apply min-w-0; }
+.settings-level-back { @apply flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-[12px] border border-line bg-white text-muted transition hover:bg-[#edf0f4] hover:text-ink; }
+.settings-level-back svg { transform: rotate(180deg); }
 .settings-dialog-header h1 { @apply font-display text-[25px] font-bold tracking-[-.03em]; }
 .settings-dialog-header p { @apply mt-1 text-[14px] text-muted; }
 .settings-dialog-actions { @apply flex shrink-0 items-center gap-2; }
@@ -369,6 +373,21 @@ textarea.input { resize: vertical; }
 .settings-panel-body { @apply pt-6; }
 .settings-group-stack { @apply space-y-5; }
 .settings-group { @apply overflow-hidden rounded-[16px] border border-[#d6dbe3] bg-[#fbfcfe]; }
+.settings-service-list { @apply divide-y divide-line; }
+.settings-service-row { @apply grid w-full cursor-pointer grid-cols-[auto_minmax(0,1fr)_minmax(9rem,.65fr)_auto] items-center gap-3 bg-transparent px-4 py-4 text-left transition hover:bg-white sm:px-5; }
+.settings-service-copy, .settings-service-copy strong, .settings-service-copy small, .settings-service-summary, .settings-service-summary strong, .settings-service-summary small { @apply block min-w-0; }
+.settings-service-copy strong { @apply text-[14px] font-bold text-ink; }
+.settings-service-copy small { @apply mt-1 truncate text-[14px] text-muted; }
+.settings-service-summary { @apply justify-self-end text-right; }
+.settings-service-summary strong { @apply truncate text-[14px] font-semibold text-muted; }
+.settings-service-summary small { @apply mt-1 text-[12px] font-bold tracking-wide text-muted uppercase; }
+.settings-service-summary small::before { content: ""; @apply mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[#818894] align-middle; }
+.settings-service-summary small.ready { @apply text-emerald-700; }
+.settings-service-summary small.ready::before { @apply bg-emerald-500; }
+.settings-service-summary small.warning { @apply text-amber-700; }
+.settings-service-summary small.warning::before { @apply bg-amber-500; }
+.settings-service-row > svg { @apply text-muted; }
+.settings-service-enable-row { @apply flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-5; }
 .settings-group-heading { @apply flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-5; }
 .settings-group-identity { @apply flex min-w-0 items-center gap-3; }
 .settings-group-identity h3 { @apply text-[14px] font-bold; }
@@ -479,9 +498,9 @@ body { background: radial-gradient(circle at 72% -15%, rgba(53, 82, 125, .16), t
 .service-monitor { @apply px-1; }
 .service-monitor .status-card-heading { @apply px-2 pb-1.5; }
 .service-monitor .service-row { background: transparent; }
-.service-icon-stt { background: #202730; color: #c5d1de; }
-.service-icon-ocr { background: #292820; color: #d8d0ba; }
-.service-icon-llm { background: #28242d; color: #d4c9df; }
+.service-icon-stt { background: transparent; color: #c5d1de; }
+.service-icon-ocr { background: transparent; color: #d8d0ba; }
+.service-icon-llm { background: transparent; color: #d4c9df; }
 .service-state.online { color: #67dca5; }
 .service-state { @apply w-3 justify-center; }
 .service-state.offline i { background: #ff7770; }
@@ -706,11 +725,17 @@ select option { background: #15181d; color: #eef0f2; }
 
 .settings-dialog { border-color: #34383e; background: #1d1f22; }
 .settings-nav { border-color: #30343a; background: #181a1d; }
+.settings-level-back { border-color: #3a3e44; background: #24272b; }
+.settings-level-back:hover { background: #30343a; color: #f1f3f4; }
 .settings-close-button:hover { border-color: #353a41; background: #292c31; color: #f1f3f4; }
 .settings-nav-list button:hover { background: #24272b; color: #f1f3f4; }
 .settings-nav-list button.active { background: #2c2f33; color: #f5f6f7; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .025); }
 .settings-dialog-header { border-color: #383b40; background: rgba(29, 31, 34, .95); }
 .settings-group { border-color: #34383e; background: #181a1d; }
+.settings-service-list { border-color: #34383e; }
+.settings-service-row:hover { background: #24272b; }
+.settings-service-summary small.ready { color: #68dba4; }
+.settings-service-summary small.warning { color: #f3cf76; }
 .settings-control-grid, .settings-capabilities, .settings-inline-error, .settings-inline-warning, .settings-info-row + .settings-info-row, .settings-value-row + .settings-value-row, .settings-advanced, .settings-advanced-body { border-color: #34383e; }
 .settings-control-grid { background: #1d1f22; }
 .settings-capabilities { background: #1d1f22; }
@@ -957,12 +982,19 @@ select option { background: #15181d; color: #eef0f2; }
   .settings-nav-list small { @apply hidden; }
   .settings-panel { @apply flex-1 px-3.5 pb-5; }
   .settings-dialog-header { @apply min-h-18 gap-3 py-3.5; }
+  .settings-dialog-title { @apply gap-2; }
+  .settings-level-back { @apply h-9 w-9; }
   .settings-dialog-header h1 { @apply text-[22px]; }
   .settings-dialog-header p { @apply hidden; }
   .settings-dialog-actions .button-primary, .settings-dialog-actions .button-secondary { @apply min-h-9 px-3.5 py-2 text-[14px]; }
   .settings-dialog-actions .button-primary svg { @apply hidden; }
   .settings-panel-body { @apply pt-4; }
   .settings-group-stack { @apply space-y-4; }
+  .settings-service-row { grid-template-columns: auto minmax(0, 1fr) auto auto; @apply gap-2.5 px-3.5 py-3.5; }
+  .settings-service-summary strong { @apply hidden; }
+  .settings-service-summary small { @apply mt-0; }
+  .settings-service-enable-row { @apply flex-nowrap gap-2 px-3.5 py-3.5; }
+  .settings-service-enable-row .settings-group-identity p { @apply hidden; }
   .settings-group-heading { @apply flex-nowrap gap-2 px-3.5 py-3.5; }
   .settings-group-identity { @apply gap-2.5; }
   .settings-group-identity p { @apply truncate; max-width: 150px; }
