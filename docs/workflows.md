@@ -65,6 +65,7 @@ Each flow run stores an immutable snapshot of its definition. Editing a saved wo
       "config": {
         "moduleId": "ocr",
         "workflowId": "auto",
+        "storeResult": true,
         "params": {}
       }
     },
@@ -84,6 +85,7 @@ Each flow run stores an immutable snapshot of its definition. Editing a saved wo
       "config": {
         "moduleId": "translation",
         "workflowId": "translation.default",
+        "storeResult": true,
         "params": {
           "sourceLanguage": "auto",
           "targetLanguage": "zh-Hant"
@@ -155,6 +157,8 @@ Service nodes use the current module contracts and provider settings:
 
 The LLM prompt node is the deterministic workflow counterpart to Chat. It enables summarization, classification, rewriting, and extraction without pretending that an interactive conversation completes automatically.
 
+Service outputs are durable by default. Setting `storeResult` to `false` keeps an intermediate artifact available to downstream nodes for the duration of the run, then removes its file and artifact record after the workflow finishes. Existing definitions without this field retain the default durable behavior.
+
 ### Generic nodes
 
 The useful minimum is:
@@ -164,6 +168,7 @@ The useful minimum is:
 - **If:** evaluates a safe predicate and forwards the same artifacts through `true` or `false`.
 - **Switch:** evaluates ordered cases and forwards through one matching port or `default`.
 - **Merge:** reunites exclusive or parallel branches. `all` waits for every active input; `any` continues with the first successful input.
+- **Save to file:** copies the first incoming artifact or writes explicitly configured text to a collision-safe output filename. The saved artifact retains lineage to its workflow inputs.
 - **End:** marks a successful terminal path and declares which incoming artifacts are user-facing results.
 - **Fail:** stops the active path with a readable reason. This is useful for explicit validation branches.
 
@@ -190,6 +195,7 @@ Port behavior:
 - If and Switch output ports preserve the incoming kind set.
 - Select narrows its output set.
 - Merge emits the union of its connected inputs.
+- Save to file emits the stored artifact and may also be used as a terminal node.
 - End and Fail have no output port.
 
 A provider being offline is a save-time warning, not a schema error, so workflows remain portable. It becomes a clear run-time blocked state if the required service is still unavailable when execution reaches that node.
@@ -210,6 +216,7 @@ Conditions are JSON and never executable source text:
 Initially supported facts should be limited to stable data:
 
 - `artifact.kind`
+- `artifact.text` for exact, trimmed textual output
 - `artifact.mimeType`
 - `artifact.role`
 - `artifact.metadata.*`
@@ -219,14 +226,14 @@ Initially supported facts should be limited to stable data:
 
 Operators are `equal`, `notEqual`, `in`, `notIn`, `exists`, `greaterThan`, `greaterThanOrEqual`, `lessThan`, `lessThanOrEqual`, `contains`, and `startsWith`. Regular expressions are deliberately excluded from v1.
 
-If content understanding is required, users should connect an LLM prompt/classification node and branch on its structured result instead of placing model behavior inside If.
+If content understanding is required, users should connect an LLM prompt/classification node and branch on its output instead of placing model behavior inside If. `artifact.text` is useful for exact results such as `true`, `false`, or a known label; it does not perform semantic interpretation.
 
 ## Validation
 
 A definition cannot run until it passes all structural checks:
 
 1. Schema version, IDs, node configs, and parameters are valid.
-2. There is exactly one Input and at least one End or Create chat terminal.
+2. There is exactly one Input and at least one Save to file, End, Fail, or Create chat terminal.
 3. The graph has no cycles and every node is reachable from Input.
 4. Every active branch can reach a terminal node.
 5. Every edge has at least one compatible artifact kind.
@@ -247,7 +254,8 @@ A flow run is an orchestrator over existing module workflow runs, not a replacem
 4. Execute each ready service node as a normal registered module run within the flow worker.
 5. When it finishes, record its output artifact IDs, evaluate routing nodes synchronously, and schedule newly ready nodes.
 6. Mark unchosen branches `skipped`; Merge waits only for active branches.
-7. End collects the terminal artifacts. The flow succeeds after every active path has ended.
+7. End collects incoming terminal artifacts, while Save to file materializes a durable output. The flow succeeds after every active path has ended.
+8. Outputs from service nodes with `storeResult: false` are removed after downstream nodes finish; durable descendant lineage is rewired to the original sources.
 
 The coordinator never enqueues a child and waits for another worker on the same queue. It executes the registered module run directly, checkpoints the durable flow state, and advances to the next ready node. This works with worker concurrency of one and avoids nested-queue deadlocks. Independent branches execute deterministically in v1; parallel scheduling can be added later without changing the JSON contract.
 
@@ -307,14 +315,15 @@ Implemented:
 1. Workflow definition, node, edge, validation-result, and flow-run contracts.
 2. Capability-router-backed typed port discovery.
 3. Atomic workflow definition storage and CRUD/validation APIs.
-4. Durable Input, Module, Select, If, Switch, Merge, End, and Fail execution.
+4. Durable Input, Module, Select, If, Switch, Merge, Save to file, End, and Fail execution.
 5. Recovery, retry, cancellation, LLM Prompt, and Create chat behavior.
-6. Visual editor, workflow library, run history, and mobile vertical editor outline.
+6. Visual editor with multi-node selection, Space-drag panning, workflow library, run history, and mobile vertical editor outline.
+7. Live and historical node-diagram status, selected-branch visualization, temporary service results, and explicit file storage.
 
 Next:
 
 1. Add a starter-template gallery beyond the built-in OCR flow.
-2. Add richer workflow run visualization to the job detail page.
-3. Add optional parallel branch scheduling while preserving deterministic persisted state.
+2. Add optional parallel branch scheduling while preserving deterministic persisted state.
+3. Expand declarative conditions and output naming without introducing arbitrary code execution.
 
 The first integration fixture should run without the browser and assert artifact lineage across the complete graph. The editor is a client of this contract, not the owner of workflow meaning.

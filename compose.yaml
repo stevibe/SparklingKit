@@ -2,32 +2,37 @@ services:
   app:
     build: .
     ports:
-      - "8787:8787"
+      - "${SPARKLINGKIT_PORT:-54321}:54321"
     volumes:
       - ./data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       REDIS_URL: redis://redis:6379
+      PORT: "54321"
       DATA_DIR: /data
       WORKER_ENABLED: "true"
-      SYSTEM_STATUS_BASE_URL: ${SYSTEM_STATUS_BASE_URL:-http://192.0.2.10:8330}
-      LLM_BASE_URL: ${LLM_BASE_URL:-http://192.0.2.10:8331/v1}
+      SYSTEM_STATUS_BASE_URL: ${SYSTEM_STATUS_BASE_URL:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_MODEL: ${LLM_MODEL:-qwen36-35b-a3b-nvfp4}
       LLM_API_KEY: ${LLM_API_KEY:-}
-      OCR_BASE_URL: ${OCR_BASE_URL:-http://192.0.2.10:8332/v1}
+      OCR_BASE_URL: ${OCR_BASE_URL:-}
       OCR_MODEL: ${OCR_MODEL:-Unlimited-OCR}
       OCR_API_KEY: ${OCR_API_KEY:-}
-      STT_BASE_URL: ${STT_BASE_URL:-http://192.0.2.10:8333/v1}
+      STT_BASE_URL: ${STT_BASE_URL:-}
       STT_MODEL: ${STT_MODEL:-Qwen3-ASR-1.7B}
       STT_API_KEY: ${STT_API_KEY:-}
-      TRANSLATION_BASE_URL: ${TRANSLATION_BASE_URL:-http://192.0.2.10:8334/v1}
+      TRANSLATION_BASE_URL: ${TRANSLATION_BASE_URL:-}
       TRANSLATION_MODEL: ${TRANSLATION_MODEL:-Hy-MT2-1.8B-FP8}
       TRANSLATION_API_KEY: ${TRANSLATION_API_KEY:-}
-      GROUNDING_BASE_URL: ${GROUNDING_BASE_URL:-http://192.0.2.10:8335/v1}
+      GROUNDING_BASE_URL: ${GROUNDING_BASE_URL:-}
       GROUNDING_MODEL: ${GROUNDING_MODEL:-nvidia/LocateAnything-3B}
       GROUNDING_API_KEY: ${GROUNDING_API_KEY:-}
-      IMAGE_GENERATION_BASE_URL: ${IMAGE_GENERATION_BASE_URL:-http://192.0.2.10:8336/v1}
+      IMAGE_GENERATION_BASE_URL: ${IMAGE_GENERATION_BASE_URL:-}
       IMAGE_GENERATION_MODEL: ${IMAGE_GENERATION_MODEL:-Z-Image-Turbo}
       IMAGE_GENERATION_API_KEY: ${IMAGE_GENERATION_API_KEY:-}
+      SPARKLINGKIT_SETUP_COMPLETE: ${SPARKLINGKIT_SETUP_COMPLETE:-}
+      SPARKLINGKIT_DEPLOYMENT_MODE: ${SPARKLINGKIT_DEPLOYMENT_MODE:-custom}
     depends_on:
       redis:
         condition: service_healthy

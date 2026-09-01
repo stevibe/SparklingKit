@@ -1,0 +1,218 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$PROJECT_DIR"
+ASSET_BASE_URL="${SPARKLINGKIT_ASSET_BASE_URL:-https://run.sparklingkit.com/stable}"
+
+COMPOSE=(docker compose --project-directory "$PROJECT_DIR" --file "$PROJECT_DIR/compose.yaml")
+if [[ -f "$PROJECT_DIR/.rollback-compose.yaml" ]]; then
+  COMPOSE+=(--file "$PROJECT_DIR/.rollback-compose.yaml")
+fi
+
+usage() {
+  cat <<'EOF'
+Usage: ./sparklingkit <command>
+
+Commands:
+  start       Pull missing images and start SparklingKit
+  update      Pull the selected release and recreate containers safely
+  rollback    Restore the application image used before the last update
+  status      Show containers and the application health check
+  logs        Follow application and Redis logs
+  restart     Restart the application and Redis
+  stop        Stop containers without deleting ./data
+  version     Show the configured and running image
+  help        Show this help
+
+All durable application files and Redis state remain under ./data.
+Set SPARKLINGKIT_IMAGE in .env to pin or change the release channel.
+EOF
+}
+
+require_docker() {
+  if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
+    printf 'Docker Engine with Docker Compose v2 is required.\n' >&2
+    exit 1
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    printf 'The Docker daemon is not available.\n' >&2
+    exit 1
+  fi
+  if ! command -v curl >/dev/null 2>&1; then
+    printf 'curl is required for application health checks.\n' >&2
+    exit 1
+  fi
+}
+
+wait_until_ready() {
+  local started_at
+  local port
+  started_at="$(date +%s)"
+  port="$(app_port)"
+  printf 'Waiting for SparklingKit'
+  while ! curl --fail --silent --max-time 3 "http://127.0.0.1:$port/api/health" >/dev/null 2>&1; do
+    if (( $(date +%s) - started_at >= 180 )); then
+      printf '\nSparklingKit did not become healthy within 180 seconds.\n' >&2
+      "${COMPOSE[@]}" logs --tail 120 app >&2
+      exit 1
+    fi
+    printf '.'
+    sleep 3
+  done
+  printf ' ready\n'
+}
+
+file_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    printf 'sha256sum or shasum is required to verify release assets.\n' >&2
+    return 1
+  fi
+}
+
+refresh_release_assets() {
+  local temp_dir
+  temp_dir="$(mktemp -d "$PROJECT_DIR/.update.XXXXXX")"
+  for asset in compose.yaml sparklingkit SHA256SUMS; do
+    if ! curl --fail --silent --show-error --location "$ASSET_BASE_URL/$asset" --output "$temp_dir/$asset"; then
+      rm -rf "$temp_dir"
+      printf 'Could not download the current release assets. No local files were replaced.\n' >&2
+      return 1
+    fi
+  done
+  for asset in compose.yaml sparklingkit; do
+    local expected actual
+    expected="$(awk -v name="$asset" '$2 == name { print $1 }' "$temp_dir/SHA256SUMS")"
+    actual="$(file_sha256 "$temp_dir/$asset")"
+    if [[ -z "$expected" || "$actual" != "$expected" ]]; then
+      rm -rf "$temp_dir"
+      printf 'Checksum verification failed for %s. No local files were replaced.\n' "$asset" >&2
+      return 1
+    fi
+  done
+  cp "$PROJECT_DIR/compose.yaml" "$PROJECT_DIR/.previous-compose.yaml"
+  cp "$PROJECT_DIR/sparklingkit" "$PROJECT_DIR/.previous-sparklingkit"
+  mv "$temp_dir/compose.yaml" "$PROJECT_DIR/compose.yaml"
+  mv "$temp_dir/sparklingkit" "$PROJECT_DIR/sparklingkit"
+  mv "$temp_dir/SHA256SUMS" "$PROJECT_DIR/SHA256SUMS"
+  chmod +x "$PROJECT_DIR/sparklingkit"
+  rm -rf "$temp_dir"
+}
+
+app_port() {
+  local published
+  published="$("${COMPOSE[@]}" port app 54321 2>/dev/null | head -n 1 || true)"
+  if [[ -n "$published" ]]; then
+    printf '%s\n' "${published##*:}"
+  else
+    printf '%s\n' "${SPARKLINGKIT_PORT:-54321}"
+  fi
+}
+
+show_addresses() {
+  local lan_address
+  local port
+  lan_address="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+  port="$(app_port)"
+  printf 'Open http://localhost:%s\n' "$port"
+  if [[ -n "$lan_address" ]]; then
+    printf 'LAN:  http://%s:%s\n' "$lan_address" "$port"
+  fi
+  printf 'Do not expose SparklingKit directly to the public internet.\n'
+}
+
+require_docker
+mkdir -p "$PROJECT_DIR/data/.redis"
+
+case "${1:-help}" in
+  start)
+    "${COMPOSE[@]}" up -d
+    wait_until_ready
+    show_addresses
+    ;;
+  update|upgrade)
+    if [[ -f "$PROJECT_DIR/.rollback-compose.yaml" ]]; then
+      rm "$PROJECT_DIR/.rollback-compose.yaml"
+      COMPOSE=(docker compose --project-directory "$PROJECT_DIR" --file "$PROJECT_DIR/compose.yaml")
+    fi
+    if [[ "${SPARKLINGKIT_SKIP_ASSET_UPDATE:-false}" != "true" ]]; then
+      printf 'Refreshing verified release assets...\n'
+      refresh_release_assets
+    fi
+    previous_image="$("${COMPOSE[@]}" ps -q app | xargs docker inspect --format '{{.Config.Image}} {{.Image}}' 2>/dev/null || true)"
+    if [[ -n "$previous_image" ]]; then
+      printf '%s\n' "$previous_image" > "$PROJECT_DIR/.previous-image"
+    fi
+    printf 'Pulling the configured SparklingKit and Redis releases...\n'
+    "${COMPOSE[@]}" pull
+    "${COMPOSE[@]}" up -d --remove-orphans
+    wait_until_ready
+    printf 'Upgrade complete. Your data remained in %s/data.\n' "$PROJECT_DIR"
+    show_addresses
+    ;;
+  rollback)
+    if [[ ! -s "$PROJECT_DIR/.previous-image" ]]; then
+      printf 'No previous application image was recorded.\n' >&2
+      exit 1
+    fi
+    previous_id="$(awk '{print $2}' "$PROJECT_DIR/.previous-image")"
+    if [[ -z "$previous_id" ]] || ! docker image inspect "$previous_id" >/dev/null 2>&1; then
+      printf 'The previous image is no longer available in the local Docker cache.\n' >&2
+      exit 1
+    fi
+    docker image tag "$previous_id" sparklingkit/local-rollback:previous
+    if [[ -f "$PROJECT_DIR/.previous-compose.yaml" ]]; then
+      cp "$PROJECT_DIR/compose.yaml" "$PROJECT_DIR/.failed-compose.yaml"
+      cp "$PROJECT_DIR/.previous-compose.yaml" "$PROJECT_DIR/compose.yaml"
+    fi
+    if [[ -f "$PROJECT_DIR/.previous-sparklingkit" ]]; then
+      cp "$PROJECT_DIR/.previous-sparklingkit" "$PROJECT_DIR/sparklingkit"
+      chmod +x "$PROJECT_DIR/sparklingkit"
+    fi
+    printf '%s\n' 'services:' '  app:' '    image: sparklingkit/local-rollback:previous' > "$PROJECT_DIR/.rollback-compose.yaml"
+    rollback_compose=(docker compose --project-directory "$PROJECT_DIR" --file "$PROJECT_DIR/compose.yaml" --file "$PROJECT_DIR/.rollback-compose.yaml")
+    "${rollback_compose[@]}" up -d --no-deps app
+    wait_until_ready
+    printf 'SparklingKit was rolled back. Run ./sparklingkit update to return to the configured release channel.\n'
+    ;;
+  status)
+    "${COMPOSE[@]}" ps
+    if curl --fail --silent --max-time 3 "http://127.0.0.1:$(app_port)/api/health" >/dev/null 2>&1; then
+      printf '\nApplication health: ready\n'
+    else
+      printf '\nApplication health: unavailable\n'
+    fi
+    ;;
+  logs)
+    "${COMPOSE[@]}" logs --follow --tail 200 app redis
+    ;;
+  restart)
+    "${COMPOSE[@]}" restart
+    wait_until_ready
+    ;;
+  stop)
+    "${COMPOSE[@]}" stop
+    printf 'SparklingKit is stopped. Nothing under %s/data was removed.\n' "$PROJECT_DIR"
+    ;;
+  version)
+    configured="$("${COMPOSE[@]}" config --images | head -n 1)"
+    running="$("${COMPOSE[@]}" ps -q app | xargs docker inspect --format '{{.Config.Image}} ({{.Image}})' 2>/dev/null || true)"
+    printf 'Configured: %s\n' "$configured"
+    printf 'Running:    %s\n' "${running:-not running}"
+    if [[ -f "$PROJECT_DIR/.previous-image" ]]; then
+      printf 'Previous:   %s\n' "$(cat "$PROJECT_DIR/.previous-image")"
+    fi
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  *)
+    printf 'Unknown command: %s\n\n' "$1" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Run SparklingKit</title>
+    <style>
+      :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #090a0c; color: #f1f3f5; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; }
+      main { width: min(720px, calc(100vw - 40px)); }
+      h1 { margin: 0; font-size: clamp(2.5rem, 7vw, 4.75rem); letter-spacing: -.055em; }
+      p { color: #a4abb5; font-size: 1.05rem; line-height: 1.7; }
+      pre { overflow-x: auto; border: 1px solid #303640; border-radius: 14px; background: #121519; padding: 18px; color: #eef0f2; }
+      a { color: #d3c4e4; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>SparklingKit</h1>
+      <p>Install the local-first AI workspace with Docker Compose. Download and inspect the installer before running it.</p>
+      <pre><code>curl -fsSLO https://run.sparklingkit.com/stable/install.sh
+less install.sh
+bash install.sh</code></pre>
+      <p><a href="https://github.com/stevibe/SparklingKit">Source and documentation on GitHub</a></p>
+    </main>
+  </body>
+</html>

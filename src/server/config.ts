@@ -1,65 +1,52 @@
 import path from "node:path";
 import type { PromptPreset, Settings } from "./models.js";
+import { DEPLOYMENT_MODES } from "../shared/contracts.js";
+import { REFERENCE_SERVICE_CATALOG } from "../shared/reference-stack.js";
 
 export const ROOT_DIR = process.cwd();
 export const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(ROOT_DIR, "data"));
 export const CLIENT_DIR = path.resolve(ROOT_DIR, "dist-client");
-export const PORT = Number(process.env.PORT || 8787);
+export const PORT = Number(process.env.PORT || 54321);
 export const REDIS_URL = process.env.REDIS_URL || "redis://127.0.0.1:6379";
+export const APP_VERSION = process.env.SPARKLINGKIT_VERSION || "development";
 
-export const BUNDLED_SERVICE_CATALOG = {
-  systemStatus: { port: 8330, baseUrl: "http://192.0.2.10:8330" },
-  llm: { port: 8331, baseUrl: "http://192.0.2.10:8331/v1", model: "qwen36-35b-a3b-nvfp4" },
-  ocr: { port: 8332, baseUrl: "http://192.0.2.10:8332/v1", model: "Unlimited-OCR" },
-  stt: { port: 8333, baseUrl: "http://192.0.2.10:8333/v1", model: "Qwen3-ASR-1.7B" },
-  translation: { port: 8334, baseUrl: "http://192.0.2.10:8334/v1", model: "Hy-MT2-1.8B-FP8" },
-  grounding: { port: 8335, baseUrl: "http://192.0.2.10:8335/v1", model: "nvidia/LocateAnything-3B" },
-  imageGeneration: { port: 8336, baseUrl: "http://192.0.2.10:8336/v1", model: "Z-Image-Turbo" },
-} as const;
+export const BUNDLED_SERVICE_CATALOG = REFERENCE_SERVICE_CATALOG;
+
+function environmentEndpoint(baseUrl: string | undefined, model: string | undefined, fallbackModel: string, capabilities?: Settings["endpoints"]["llm"]["capabilities"]) {
+  const normalizedBaseUrl = baseUrl?.trim() || "";
+  return {
+    baseUrl: normalizedBaseUrl,
+    model: model?.trim() || fallbackModel,
+    apiKey: "",
+    enabled: Boolean(normalizedBaseUrl),
+    ...(capabilities ? { capabilities } : {}),
+  };
+}
+
+const configuredMode = DEPLOYMENT_MODES.includes(process.env.SPARKLINGKIT_DEPLOYMENT_MODE as (typeof DEPLOYMENT_MODES)[number])
+  ? process.env.SPARKLINGKIT_DEPLOYMENT_MODE as Settings["setup"]["mode"]
+  : "custom";
+const explicitlyComplete = process.env.SPARKLINGKIT_SETUP_COMPLETE;
+const environmentHasServices = [process.env.LLM_BASE_URL, process.env.OCR_BASE_URL, process.env.STT_BASE_URL, process.env.TRANSLATION_BASE_URL, process.env.GROUNDING_BASE_URL, process.env.IMAGE_GENERATION_BASE_URL].some((value) => Boolean(value?.trim()));
 
 export const defaultSettings: Settings = {
   schemaVersion: 2,
+  setup: {
+    completed: explicitlyComplete === "true" || (explicitlyComplete !== "false" && environmentHasServices),
+    mode: configuredMode,
+    onboardingVersion: 1,
+    ...(explicitlyComplete === "true" || (explicitlyComplete !== "false" && environmentHasServices) ? { completedAt: new Date().toISOString() } : {}),
+  },
   systemStatus: {
-    baseUrl: process.env.SYSTEM_STATUS_BASE_URL || BUNDLED_SERVICE_CATALOG.systemStatus.baseUrl,
+    baseUrl: process.env.SYSTEM_STATUS_BASE_URL?.trim() || "",
   },
   endpoints: {
-    llm: {
-      baseUrl: process.env.LLM_BASE_URL || BUNDLED_SERVICE_CATALOG.llm.baseUrl,
-      model: process.env.LLM_MODEL || BUNDLED_SERVICE_CATALOG.llm.model,
-      apiKey: process.env.LLM_API_KEY || "",
-      enabled: true,
-      capabilities: ["text", "image"],
-    },
-    ocr: {
-      baseUrl: process.env.OCR_BASE_URL || BUNDLED_SERVICE_CATALOG.ocr.baseUrl,
-      model: process.env.OCR_MODEL || BUNDLED_SERVICE_CATALOG.ocr.model,
-      apiKey: process.env.OCR_API_KEY || "",
-      enabled: true,
-    },
-    stt: {
-      baseUrl: process.env.STT_BASE_URL || BUNDLED_SERVICE_CATALOG.stt.baseUrl,
-      model: process.env.STT_MODEL || BUNDLED_SERVICE_CATALOG.stt.model,
-      apiKey: process.env.STT_API_KEY || "",
-      enabled: true,
-    },
-    translation: {
-      baseUrl: process.env.TRANSLATION_BASE_URL || BUNDLED_SERVICE_CATALOG.translation.baseUrl,
-      model: process.env.TRANSLATION_MODEL || BUNDLED_SERVICE_CATALOG.translation.model,
-      apiKey: process.env.TRANSLATION_API_KEY || "",
-      enabled: true,
-    },
-    grounding: {
-      baseUrl: process.env.GROUNDING_BASE_URL || BUNDLED_SERVICE_CATALOG.grounding.baseUrl,
-      model: process.env.GROUNDING_MODEL || BUNDLED_SERVICE_CATALOG.grounding.model,
-      apiKey: process.env.GROUNDING_API_KEY || "",
-      enabled: true,
-    },
-    "image-generation": {
-      baseUrl: process.env.IMAGE_GENERATION_BASE_URL || BUNDLED_SERVICE_CATALOG.imageGeneration.baseUrl,
-      model: process.env.IMAGE_GENERATION_MODEL || BUNDLED_SERVICE_CATALOG.imageGeneration.model,
-      apiKey: process.env.IMAGE_GENERATION_API_KEY || "",
-      enabled: true,
-    },
+    llm: { ...environmentEndpoint(process.env.LLM_BASE_URL, process.env.LLM_MODEL, BUNDLED_SERVICE_CATALOG.llm.model, ["text", "image"]), apiKey: process.env.LLM_API_KEY || "" },
+    ocr: { ...environmentEndpoint(process.env.OCR_BASE_URL, process.env.OCR_MODEL, BUNDLED_SERVICE_CATALOG.ocr.model), apiKey: process.env.OCR_API_KEY || "" },
+    stt: { ...environmentEndpoint(process.env.STT_BASE_URL, process.env.STT_MODEL, BUNDLED_SERVICE_CATALOG.stt.model), apiKey: process.env.STT_API_KEY || "" },
+    translation: { ...environmentEndpoint(process.env.TRANSLATION_BASE_URL, process.env.TRANSLATION_MODEL, BUNDLED_SERVICE_CATALOG.translation.model), apiKey: process.env.TRANSLATION_API_KEY || "" },
+    grounding: { ...environmentEndpoint(process.env.GROUNDING_BASE_URL, process.env.GROUNDING_MODEL, BUNDLED_SERVICE_CATALOG.grounding.model), apiKey: process.env.GROUNDING_API_KEY || "" },
+    "image-generation": { ...environmentEndpoint(process.env.IMAGE_GENERATION_BASE_URL, process.env.IMAGE_GENERATION_MODEL, BUNDLED_SERVICE_CATALOG.imageGeneration.model), apiKey: process.env.IMAGE_GENERATION_API_KEY || "" },
   },
   audio: {
     chunkTargetSec: 60,

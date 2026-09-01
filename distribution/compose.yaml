@@ -1,0 +1,41 @@
+name: sparklingkit
+
+services:
+  app:
+    image: ${SPARKLINGKIT_IMAGE:-ghcr.io/stevibe/sparklingkit:latest}
+    init: true
+    ports:
+      - "${SPARKLINGKIT_BIND:-0.0.0.0}:${SPARKLINGKIT_PORT:-54321}:54321"
+    volumes:
+      - ./data:/data
+    environment:
+      PORT: "54321"
+      DATA_DIR: /data
+      REDIS_URL: redis://redis:6379
+      WORKER_ENABLED: "true"
+      SPARKLINGKIT_SETUP_COMPLETE: ""
+      SPARKLINGKIT_DEPLOYMENT_MODE: custom
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:54321/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - ./data/.redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+    restart: unless-stopped

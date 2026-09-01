@@ -37,6 +37,11 @@ export async function initializeData() {
   } else {
     const saved = JSON.parse(await fs.readFile(settingsPath, "utf8")) as Partial<Settings> & { pdf?: Partial<Settings["pdf"]> & { skipOcrIfTextLayer?: boolean } };
     let changed = false;
+    if (!saved.setup) {
+      const hasConfiguredService = Object.values(saved.endpoints || {}).some((endpoint) => Boolean(endpoint?.baseUrl && endpoint?.model));
+      saved.setup = { completed: hasConfiguredService || defaultSettings.setup.completed, mode: defaultSettings.setup.mode, onboardingVersion: 1, ...(hasConfiguredService || defaultSettings.setup.completed ? { completedAt: new Date().toISOString() } : {}) };
+      changed = true;
+    }
     if (saved.pdf && "skipOcrIfTextLayer" in saved.pdf) {
       delete saved.pdf.skipOcrIfTextLayer;
       changed = true;
@@ -62,9 +67,11 @@ function migrateBundledServiceDefaults(saved: Partial<Settings>) {
   let changed = false;
   const move = (kind: keyof Settings["endpoints"], previousBaseUrls: string[], provisionIfEmpty = false) => {
     const current = saved.endpoints?.[kind];
+    const replacement = defaultSettings.endpoints[kind];
+    if (!replacement.baseUrl) return;
     const isEmpty = !current?.baseUrl && !current?.model;
     if (!current || previousBaseUrls.includes(current.baseUrl) || (provisionIfEmpty && isEmpty)) {
-      saved.endpoints![kind] = { ...defaultSettings.endpoints[kind], apiKey: "" };
+      saved.endpoints![kind] = { ...replacement, apiKey: "" };
       changed = true;
     }
   };
@@ -93,6 +100,7 @@ export async function readSettings(): Promise<Settings> {
     ...structuredClone(defaultSettings),
     ...saved,
     schemaVersion: 2,
+    setup: { ...defaultSettings.setup, ...saved.setup },
     systemStatus: { ...defaultSettings.systemStatus, ...saved.systemStatus },
     endpoints,
     audio: { ...defaultSettings.audio, ...saved.audio },

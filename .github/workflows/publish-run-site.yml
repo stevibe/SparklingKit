@@ -1,0 +1,69 @@
+name: Publish run.sparklingkit.com
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Immutable GitHub release tag to publish as stable
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download attested release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          mkdir release-assets
+          gh release download "$RELEASE_TAG" --dir release-assets
+          cd release-assets
+          sha256sum --check SHA256SUMS
+
+      - name: Assemble static distribution site
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          mkdir -p run-site/stable run-site/dgx/stable "run-site/v${version}" "run-site/dgx/v${version}"
+          cp distribution/site/index.html distribution/site/CNAME run-site/
+          cp release-assets/install.sh release-assets/compose.yaml release-assets/sparklingkit release-assets/SHA256SUMS run-site/stable/
+          cp release-assets/install.sh release-assets/compose.yaml release-assets/sparklingkit release-assets/SHA256SUMS "run-site/v${version}/"
+          cp release-assets/dgx-install.sh run-site/dgx/stable/install.sh
+          cp release-assets/sparklingkit-dgx-stack.tar.gz release-assets/SHA256SUMS run-site/dgx/stable/
+          cp release-assets/dgx-install.sh "run-site/dgx/v${version}/install.sh"
+          cp release-assets/sparklingkit-dgx-stack.tar.gz release-assets/SHA256SUMS "run-site/dgx/v${version}/"
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: run-site
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

@@ -14,7 +14,9 @@ describe("bundled service catalog", () => {
     });
   });
 
-  it("makes the system monitor part of the saved settings model", () => {
-    expect(defaultSettings.systemStatus).toEqual({ baseUrl: "http://192.0.2.10:8330" });
+  it("leaves a fresh installation unconfigured for first-run onboarding", () => {
+    expect(defaultSettings.setup).toEqual({ completed: false, mode: "custom", onboardingVersion: 1 });
+    expect(defaultSettings.systemStatus).toEqual({ baseUrl: "" });
+    expect(Object.values(defaultSettings.endpoints).every((endpoint) => !endpoint.baseUrl && !endpoint.enabled)).toBe(true);
   });
 });

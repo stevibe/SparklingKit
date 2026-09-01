@@ -56,6 +56,7 @@ export type ChatMessage = ChatRecord["messages"][number];
 
 export interface Health {
   ok: boolean;
+  version: string;
   endpoints: Record<EndpointKind, EndpointHealth>;
   redis: { ok: boolean; latencyMs: number; error?: string };
 }

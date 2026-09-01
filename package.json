@@ -1,7 +1,17 @@
 {
   "name": "sparklingkit",
   "version": "0.1.0",
+  "description": "A local-first, file-oriented AI workspace for modular inference services and reusable workflows.",
   "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/stevibe/SparklingKit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/stevibe/SparklingKit/issues"
+  },
+  "homepage": "https://github.com/stevibe/SparklingKit#readme",
   "type": "module",
   "scripts": {
     "dev": "concurrently -n api,web -c cyan,magenta \"tsx watch src/server/index.ts\" \"vite\"",

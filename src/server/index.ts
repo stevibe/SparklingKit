@@ -9,7 +9,7 @@ import { ENDPOINT_KINDS, MODEL_INPUT_CAPABILITIES, MODULE_IDS, SEARCH_SCOPES } f
 import { getModuleContract, moduleAcceptsArtifact, moduleWorkflowForArtifact } from "../shared/module-router.js";
 import { checkEndpoint, openChatStream } from "./ai.js";
 import { modelMessagesForChat } from "./chat-messages.js";
-import { CLIENT_DIR, DATA_DIR, PORT } from "./config.js";
+import { APP_VERSION, CLIENT_DIR, DATA_DIR, PORT } from "./config.js";
 import { jobEvents, publishJob } from "./events.js";
 import type { ChatMessage, EndpointKind, JobKind, PromptPreset, Settings } from "./models.js";
 import { listModules } from "./modules/registry.js";
@@ -70,6 +70,7 @@ const endpointSchema = z.object({
 }).refine((endpoint) => !endpoint.enabled || Boolean(endpoint.baseUrl && endpoint.model), "Enabled services require a base URL and model");
 const settingsSchema = z.object({
   schemaVersion: z.literal(2),
+  setup: z.object({ completed: z.boolean(), mode: z.enum(["all-in-one", "split", "custom"]), onboardingVersion: z.number().int().min(1), completedAt: z.string().datetime().optional() }),
   systemStatus: z.object({ baseUrl: z.union([z.string().url(), z.literal("")]) }),
   endpoints: z.object({ stt: endpointSchema, ocr: endpointSchema, llm: endpointSchema, translation: endpointSchema, grounding: endpointSchema, "image-generation": endpointSchema }),
   audio: z.object({
@@ -140,7 +141,7 @@ app.get("/api/health", async (_request, response) => {
   ]);
   const endpoints = Object.fromEntries(checks) as Record<EndpointKind, Awaited<ReturnType<typeof checkEndpoint>>>;
   const enabled = Object.values(endpoints).filter((endpoint) => endpoint.enabled);
-  response.json({ ok: redis.ok && enabled.every((endpoint) => endpoint.ok), endpoints, redis });
+  response.json({ ok: redis.ok && enabled.every((endpoint) => endpoint.ok), version: APP_VERSION, endpoints, redis });
 });
 
 app.get("/api/system/status", async (_request, response) => {

@@ -191,6 +191,9 @@ export function SettingsPage() {
             <div className="settings-section-block"><h3>Region and time</h3><div className="settings-group settings-value-group">
               <div className="settings-value-row"><span><strong>Time zone</strong><small>Used for displayed dates and times, and when naming new job and conversation folders. Existing work is not renamed.</small></span><span className="timezone-setting-control"><SearchSelect value={settings.ui.timezone} onChange={(timezone) => setSettings({ ...settings, ui: { ...settings.ui, timezone } })} options={[...(!["UTC", ...timezoneOptions].includes(settings.ui.timezone) ? [{ value: settings.ui.timezone, label: settings.ui.timezone.replaceAll("_", " ") }] : []), { value: "UTC", label: "UTC" }, ...timezoneOptions.filter((timezone) => timezone !== "UTC").map((timezone) => ({ value: timezone, label: timezone.replaceAll("_", " ") }))]} searchPlaceholder="Search time zones" emptyMessage="No time zones found" ariaLabel="Time zone" /><button className="button-secondary compact" onClick={() => setSettings({ ...settings, ui: { ...settings.ui, timezone: browserTimezone } })}>Use device time zone</button></span></div>
             </div><p className="settings-footnote">This device reports <strong>{browserTimezone.replaceAll("_", " ")}</strong>.</p></div>
+            <div className="settings-section-block"><h3>Deployment</h3><div className="settings-group settings-value-group">
+              <div className="settings-value-row settings-deployment-row"><span><strong>Application and model services</strong><small>Choose whether SparklingKit and the reference models share one DGX Spark, run on separate hosts, or use independently configured services.</small></span><span className="settings-deployment-control"><strong>{deploymentModeLabel(settings.setup.mode)}</strong><button className="button-secondary compact" onClick={() => navigate("/setup")}>Change setup</button></span></div>
+            </div><p className="settings-footnote">Changing the setup verifies and updates service endpoints. Your jobs, chats, workflows, and files are not removed.</p></div>
           </section>}
           {tab === "services" && !selectedService && <section className="settings-section-block">
             <h3>System</h3>
@@ -281,6 +284,12 @@ function NumberSetting({ label, description, value, suffix, min, max, step, onCh
 
 function ToggleSetting({ label, description, checked, onChange }: { label: string; description: string; checked: boolean; onChange: (value: boolean) => void }) {
   return <label className="settings-value-row"><span><strong>{label}</strong><small>{description}</small></span><span className={cn("settings-toggle", checked && "active")}><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} /><i /></span></label>;
+}
+
+function deploymentModeLabel(mode: Settings["setup"]["mode"]) {
+  if (mode === "all-in-one") return "One DGX Spark";
+  if (mode === "split") return "Split deployment";
+  return "Custom services";
 }
 
 function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {

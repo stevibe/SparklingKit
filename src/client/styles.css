@@ -542,6 +542,116 @@ textarea.input { @apply text-[16px]; resize: vertical; }
 .chat-composer { @apply mx-auto flex max-w-5xl items-end gap-2 rounded-[20px] border border-[#cbd1da] bg-white p-2.5; box-shadow: 0 5px 18px rgba(32,33,36,.14); }
 .chat-composer textarea { @apply max-h-44 min-h-10 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2 text-[16px] leading-7 outline-none placeholder:text-[#8b9198]; }
 .send-button { @apply flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#0b57d0] text-white transition hover:bg-[#0842a0] disabled:bg-[#d9dde3] disabled:text-[#8b9198]; box-shadow: 0 1px 3px rgba(11,87,208,.25); }
+/* First-run deployment */
+.onboarding-page { @apply min-h-screen text-[#f2f4f7]; background: radial-gradient(circle at 72% -15%, rgba(65, 96, 143, .2), transparent 34rem), #090a0c; }
+.onboarding-shell { @apply mx-auto flex min-h-screen w-full max-w-[1240px] flex-col px-7 pb-14 sm:px-10 lg:px-14; }
+.onboarding-header { @apply flex min-h-24 items-center justify-between gap-4 border-b border-[#272c33]; }
+.onboarding-content { @apply mx-auto w-full max-w-[1040px] py-14 lg:py-20; }
+.onboarding-intro { @apply max-w-[760px]; }
+.onboarding-intro > span { @apply text-[13px] font-bold tracking-[.15em] text-[#89919c] uppercase; }
+.onboarding-intro h1 { @apply mt-3 font-display text-[40px] leading-[1.08] font-bold tracking-[-.045em] sm:text-[52px]; }
+.onboarding-intro p { @apply mt-5 text-[16px] leading-7 text-[#a7aeb8] sm:text-[18px] sm:leading-8; }
+.onboarding-setup { @apply max-w-[1040px]; }
+.onboarding-existing-note { @apply mt-8 flex items-start gap-3 rounded-[15px] border border-[#5a4c2a] bg-[#2a2417] px-4 py-3.5 text-[#e5c875]; }
+.onboarding-existing-note > svg { @apply mt-0.5 shrink-0; }
+.onboarding-existing-note span, .onboarding-existing-note strong, .onboarding-existing-note small { @apply block; }
+.onboarding-existing-note strong { @apply text-[14px] font-bold; }
+.onboarding-existing-note small { @apply mt-1 text-[14px] leading-5 text-[#c4b487]; }
+.onboarding-tabs { @apply mt-10 grid grid-cols-3 border-b border-[#2d333b]; }
+.onboarding-tabs button { @apply relative flex min-w-0 cursor-pointer items-center justify-center gap-3 border-b-2 border-transparent px-4 py-4 text-left text-[#8e96a1] transition hover:bg-[#121519] hover:text-[#e5e8ec]; }
+.onboarding-tabs button.active { @apply border-[#e4e7eb] bg-[#121519] text-white; }
+.onboarding-tabs button > svg { @apply shrink-0; }
+.onboarding-tabs button span, .onboarding-tabs button strong, .onboarding-tabs button small { @apply block min-w-0; }
+.onboarding-tabs button strong { @apply text-[14px] font-bold; }
+.onboarding-tabs button small { @apply mt-1 truncate text-[12px] font-medium text-[#858d98]; }
+.onboarding-tab-panel { @apply border-x border-b border-[#2d333b] bg-[#0f1114] px-6 py-7 sm:px-8 sm:py-8; }
+.onboarding-panel-heading { @apply flex items-start gap-4; }
+.onboarding-panel-heading > div { @apply min-w-0; }
+.onboarding-panel-heading h2 { @apply text-[22px] font-bold tracking-[-.025em]; }
+.onboarding-panel-heading p { @apply mt-1.5 max-w-3xl text-[14px] leading-6 text-[#9da5b0]; }
+.onboarding-step { @apply mt-8 flex items-start gap-3 border-t border-[#2b3037] pt-6; }
+.onboarding-step > span { @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#292e35] text-[13px] font-bold text-[#e2e5e9]; }
+.onboarding-step h3 { @apply text-[16px] font-bold; }
+.onboarding-step p { @apply mt-1 text-[14px] leading-5 text-[#939ba6]; }
+.onboarding-connect-step { @apply mt-7; }
+.onboarding-source-tabs { @apply mt-5 inline-flex rounded-[11px] bg-[#191c21] p-1; }
+.onboarding-source-tabs button { @apply cursor-pointer rounded-[8px] px-3.5 py-2 text-[13px] font-bold text-[#8f97a2] transition hover:text-white; }
+.onboarding-source-tabs button.active { @apply bg-[#30353d] text-white; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+.onboarding-script-note { @apply mt-3 text-[13px] leading-5 text-[#858d98]; }
+.onboarding-host-field { @apply mt-5 block max-w-2xl text-[14px] font-bold; }
+.onboarding-host-field .input { @apply mt-2 text-[16px]; }
+.onboarding-reference-checks { @apply mt-6 grid border-t border-l border-[#2d333b] sm:grid-cols-2 lg:grid-cols-3; }
+.onboarding-reference-checks > div { @apply grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 border-r border-b border-[#2d333b] px-3.5 py-3; }
+.onboarding-reference-checks > div > span { @apply row-span-2 flex h-7 w-7 items-center justify-center rounded-full bg-[#252930] text-[#939ba6]; }
+.onboarding-reference-checks > div strong { @apply truncate text-[14px] font-bold; }
+.onboarding-reference-checks > div small { @apply truncate text-[12px] text-[#89919c]; }
+.onboarding-reference-checks > div.online > span { @apply bg-[#122b22] text-emerald-400; }
+.onboarding-reference-checks > div.offline > span { @apply bg-[#371b1e]; }
+.onboarding-reference-checks > div.offline > span i { @apply h-2 w-2 rounded-full bg-red-400; }
+.onboarding-review-note { @apply mt-6 flex flex-col gap-1 rounded-[12px] bg-[#171a1f] px-4 py-3 text-[13px] leading-5; }
+.onboarding-review-note strong { @apply text-[#d8dce1]; }
+.onboarding-review-note span { @apply text-[#8e96a1]; }
+.onboarding-actions { @apply mt-6 flex items-center justify-end gap-2; }
+.onboarding-actions > span { @apply mr-auto text-[13px] text-[#8e96a1]; }
+.onboarding-manual-list { @apply mt-7 divide-y divide-[#303640] border-y border-[#303640]; }
+.onboarding-manual-service { @apply py-5; }
+.onboarding-manual-service > header { @apply flex items-start justify-between gap-4; }
+.onboarding-manual-service > header div, .onboarding-manual-service > header strong, .onboarding-manual-service > header small { @apply block min-w-0; }
+.onboarding-manual-service > header strong { @apply text-[16px] font-bold; }
+.onboarding-manual-service > header small { @apply mt-1 text-[13px] text-[#929aa5]; }
+.onboarding-manual-fields { @apply mt-4 grid gap-3 lg:grid-cols-[1.35fr_1fr_1.15fr]; }
+.onboarding-manual-fields > label, .onboarding-monitor-field { @apply block text-[13px] font-bold text-[#cdd2d8]; }
+.onboarding-manual-fields .input, .onboarding-monitor-field .input { @apply mt-2 text-[14px]; }
+.onboarding-secret-field > span:first-of-type { @apply font-normal text-[#808893]; }
+.onboarding-secret-field > span:last-child { @apply relative block; }
+.onboarding-secret-field > span:last-child button { @apply absolute top-1/2 right-2.5 flex h-8 w-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-[8px] text-[#8e96a1] hover:bg-[#252a31] hover:text-white; }
+.onboarding-capability { @apply mt-4 flex cursor-pointer items-start gap-2.5 text-[13px]; }
+.onboarding-capability input { @apply mt-0.5 h-4 w-4 accent-[#dfe3e8]; }
+.onboarding-capability span, .onboarding-capability strong, .onboarding-capability small { @apply block; }
+.onboarding-capability strong { @apply font-bold; }
+.onboarding-capability small { @apply mt-0.5 text-[#89919c]; }
+.onboarding-manual-service > footer { @apply mt-4 flex items-center justify-between gap-3; }
+.onboarding-endpoint-result { @apply flex min-w-0 items-center gap-1.5 truncate text-[13px] text-[#858d98]; }
+.onboarding-endpoint-result.online { @apply text-emerald-400; }
+.onboarding-endpoint-result.offline { @apply text-red-400; }
+.onboarding-monitor-field { @apply mt-6 block max-w-2xl; }
+.onboarding-monitor-field > small { @apply mt-2 block font-normal text-[#89919c]; }
+.onboarding-options { @apply mt-10 grid gap-3 lg:grid-cols-3; }
+.onboarding-option { @apply relative flex min-h-64 cursor-pointer flex-col items-start gap-5 rounded-[22px] border border-[#2d333b] bg-[#121519] p-6 text-left transition hover:-translate-y-0.5 hover:border-[#4b535f] hover:bg-[#171b20]; box-shadow: 0 8px 24px rgba(0, 0, 0, .2); }
+.onboarding-option.recommended { border-color: #58636f; background: linear-gradient(145deg, #171b20, #121519); }
+.onboarding-option > svg { @apply absolute right-6 bottom-6 text-[#858d98]; }
+.onboarding-option-icon { @apply flex h-12 w-12 items-center justify-center rounded-[14px] bg-[#252a31] text-[#e5e8ec]; }
+.onboarding-option-copy, .onboarding-option-copy strong, .onboarding-option-copy small, .onboarding-kicker { @apply block; }
+.onboarding-option-copy { @apply pr-4; }
+.onboarding-kicker { @apply text-[12px] font-bold tracking-[.1em] text-[#8f98a4] uppercase; }
+.onboarding-option-copy strong { @apply mt-2 text-[19px] leading-6 font-bold; }
+.onboarding-option-copy small { @apply mt-3 text-[14px] leading-6 text-[#a4abb5]; }
+.onboarding-back { @apply mb-8 flex cursor-pointer items-center gap-2 text-[14px] font-bold text-[#a8afb9] transition hover:text-white; }
+.onboarding-connect { @apply max-w-[880px]; }
+.onboarding-command { @apply mt-8 flex items-center justify-between gap-4 rounded-[16px] border border-[#343a43] bg-[#111419] p-3 pl-4; }
+.onboarding-command > span { @apply flex min-w-0 items-center gap-3; }
+.onboarding-command svg { @apply shrink-0 text-[#adb5bf]; }
+.onboarding-command code { @apply min-w-0 overflow-x-auto whitespace-nowrap font-mono text-[14px] text-[#e9ebee]; }
+.onboarding-tab-panel .onboarding-command { @apply items-start; }
+.onboarding-tab-panel .onboarding-command code { white-space: pre-wrap; @apply leading-6; }
+.onboarding-command button { @apply flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-[11px] border border-[#393f48] bg-[#1c2026] text-[#d8dce1] transition hover:bg-[#282d34] hover:text-white; }
+.onboarding-host-card { @apply mt-4 rounded-[22px] border border-[#303640] bg-[#14171b] p-6 sm:p-7; }
+.onboarding-host-card label { @apply block text-[14px] font-bold; }
+.onboarding-host-card .input { @apply mt-2 text-[16px]; }
+.onboarding-host-card > p:not(.onboarding-error) { @apply mt-3 text-[14px] leading-6 text-[#979faa]; }
+.onboarding-service-checks { @apply mt-5 grid gap-2 border-t border-[#303640] pt-5 sm:grid-cols-2 lg:grid-cols-3; }
+.onboarding-service-checks span { @apply flex items-center gap-2 text-[14px] font-semibold text-[#abb2bc]; }
+.onboarding-service-checks span svg { @apply text-emerald-400; }
+.onboarding-service-checks span i { @apply h-2 w-2 rounded-full bg-red-400; }
+.onboarding-error { @apply mt-5 rounded-[12px] border border-[#6f363b] bg-[#35191c] px-4 py-3 text-[14px] leading-5 text-[#ffaaa5]; }
+.onboarding-connect-button { @apply mt-6 min-h-12; }
+.onboarding-loading { @apply flex min-h-screen flex-col items-center justify-center gap-5 bg-[#090a0c] px-6 text-center text-[#f2f4f7]; }
+.onboarding-loading .brand-wordmark { @apply text-[28px]; }
+.onboarding-loading p { @apply max-w-lg text-[14px] leading-6 text-[#a7aeb8]; }
+.onboarding-loader { @apply flex items-center gap-1.5; }
+.onboarding-loader i { @apply h-2 w-2 animate-bounce rounded-full bg-[#aeb5bf]; }
+.onboarding-loader i:nth-child(2) { animation-delay: 120ms; }
+.onboarding-loader i:nth-child(3) { animation-delay: 240ms; }
 /* Settings */
 .settings-modal-backdrop { @apply fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-5 backdrop-blur-[5px]; }
 .settings-dialog { @apply grid overflow-hidden rounded-[24px] border border-[#d0d6df] bg-white; width: min(1120px, calc(100vw - 40px)); height: min(860px, calc(100dvh - 40px)); grid-template-columns: 240px minmax(0, 1fr); box-shadow: 0 28px 90px rgba(0, 0, 0, .58), 0 2px 10px rgba(0, 0, 0, .35); }
@@ -631,6 +741,9 @@ textarea.input { @apply text-[16px]; resize: vertical; }
 .settings-value-row strong, .settings-value-row small { @apply block; }
 .settings-value-row strong { @apply text-[14px] font-bold; }
 .settings-value-row > span:first-child small { @apply mt-1 max-w-lg text-[14px] leading-5 text-muted; }
+.settings-deployment-row { @apply cursor-default; }
+.settings-deployment-control { @apply flex shrink-0 flex-col items-end gap-2; }
+.settings-deployment-control > strong { @apply text-[14px] text-muted; }
 .settings-number-control { @apply flex shrink-0 items-center gap-2; }
 .settings-number-control .input { @apply w-24 text-right; }
 .settings-number-control > small { @apply text-[14px] text-muted; }
@@ -1268,6 +1381,43 @@ body { background: radial-gradient(circle at 72% -15%, rgba(53, 82, 125, .16), t
 }
 
 @media (max-width: 767px) {
+  .onboarding-shell { @apply px-4 pb-10; }
+  .onboarding-header { @apply min-h-18; }
+  .onboarding-header .button-secondary { @apply h-10 w-10 px-0; font-size: 0; }
+  .onboarding-header .button-secondary svg { @apply h-5 w-5; }
+  .onboarding-content { @apply py-9; }
+  .onboarding-intro h1 { @apply text-[34px]; }
+  .onboarding-intro p { @apply mt-4 text-[15px] leading-6; }
+  .onboarding-options { @apply mt-7; }
+  .onboarding-tabs { @apply mt-7; }
+  .onboarding-tabs button { @apply flex-col gap-1.5 px-1.5 py-3 text-center; }
+  .onboarding-tabs button strong { @apply text-[12px] leading-4; }
+  .onboarding-tabs button small { @apply hidden; }
+  .onboarding-tab-panel { @apply px-4 py-5; }
+  .onboarding-panel-heading { @apply gap-3; }
+  .onboarding-panel-heading h2 { @apply text-[19px]; }
+  .onboarding-step { @apply mt-6 pt-5; }
+  .onboarding-source-tabs { @apply flex; }
+  .onboarding-source-tabs button { @apply flex-1; }
+  .onboarding-reference-checks { @apply grid-cols-1; }
+  .onboarding-actions { @apply flex-wrap; }
+  .onboarding-actions > span { @apply w-full flex-none; }
+  .onboarding-actions .button-primary { @apply flex-1; }
+  .onboarding-manual-fields { @apply grid-cols-1; }
+  .onboarding-manual-service > footer { @apply items-end; }
+  .onboarding-option { @apply min-h-0 flex-row items-center gap-4 rounded-[18px] p-4 pr-11; }
+  .onboarding-option > svg { @apply right-4 bottom-auto top-1/2 -translate-y-1/2; }
+  .onboarding-option-icon { @apply h-11 w-11 rounded-[13px]; }
+  .onboarding-option-copy { @apply pr-0; }
+  .onboarding-option-copy strong { @apply mt-1.5 text-[17px] leading-5; }
+  .onboarding-option-copy small { @apply mt-2 text-[14px] leading-5; }
+  .onboarding-command { @apply items-start pl-3; }
+  .onboarding-command > span { @apply items-start; }
+  .onboarding-command code { @apply whitespace-normal break-all leading-5; }
+  .onboarding-host-card { @apply p-4; }
+  .onboarding-connect-button { @apply w-full; }
+  .settings-deployment-row { @apply flex-col items-stretch; }
+  .settings-deployment-control { @apply w-full flex-row items-center justify-between; }
   .mobile-tabbar { @apply grid; }
   .toast-viewport { right: .75rem; bottom: calc(5.25rem + env(safe-area-inset-bottom)); width: calc(100vw - 1.5rem); }
   .global-search-backdrop { @apply items-stretch p-0; }

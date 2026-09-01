@@ -112,8 +112,12 @@ export interface EndpointConfig {
   capabilities?: ModelInputCapability[];
 }
 
+export const DEPLOYMENT_MODES = ["all-in-one", "split", "custom"] as const;
+export type DeploymentMode = (typeof DEPLOYMENT_MODES)[number];
+
 export interface Settings {
   schemaVersion: 2;
+  setup: { completed: boolean; mode: DeploymentMode; onboardingVersion: number; completedAt?: string };
   systemStatus: { baseUrl: string };
   endpoints: Record<EndpointKind, EndpointConfig>;
   audio: {

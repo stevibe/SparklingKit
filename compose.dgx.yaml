@@ -1,0 +1,347 @@
+# Reference six-model deployment for a 128 GB NVIDIA DGX Spark.
+# Use through scripts/start-dgx-spark.sh so the memory-heavy services start
+# sequentially and are checked for readiness before the next model is loaded.
+
+services:
+  app:
+    environment:
+      SYSTEM_STATUS_BASE_URL: http://host.docker.internal:8330
+      LLM_BASE_URL: http://host.docker.internal:8331/v1
+      LLM_MODEL: qwen36-35b-a3b-nvfp4
+      OCR_BASE_URL: http://host.docker.internal:8332/v1
+      OCR_MODEL: Unlimited-OCR
+      STT_BASE_URL: http://host.docker.internal:8333/v1
+      STT_MODEL: Qwen3-ASR-1.7B
+      TRANSLATION_BASE_URL: http://host.docker.internal:8334/v1
+      TRANSLATION_MODEL: Hy-MT2-1.8B-FP8
+      GROUNDING_BASE_URL: http://host.docker.internal:8335/v1
+      GROUNDING_MODEL: nvidia/LocateAnything-3B
+      IMAGE_GENERATION_BASE_URL: http://host.docker.internal:8336/v1
+      IMAGE_GENERATION_MODEL: Z-Image-Turbo
+      SPARKLINGKIT_SETUP_COMPLETE: "true"
+      SPARKLINGKIT_DEPLOYMENT_MODE: all-in-one
+
+  model-downloader:
+    profiles: [tools]
+    build:
+      context: ./services/dgx-models/downloader
+    image: sparklingkit/model-downloader:0.1.0
+    environment:
+      HF_HOME: /tmp/huggingface
+      HF_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      - ./data/dgx-models:/models
+
+  qwen36:
+    image: vllm/vllm-openai:v0.24.0@sha256:251eba5cc7c12fed0b75da22a9240e582b1c9e39f6fbc064f86781b963bd814f
+    container_name: sparklingkit-qwen36
+    restart: unless-stopped
+    network_mode: host
+    ipc: host
+    shm_size: "32gb"
+    mem_limit: "120g"
+    memswap_limit: "120g"
+    environment:
+      HF_HOME: /root/.cache/huggingface
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      CUTE_DSL_ARCH: sm_121a
+      CUDA_MODULE_LOADING: LAZY
+    volumes:
+      - ./data/dgx-models/nvidia/Qwen3.6-35B-A3B-NVFP4:/model:ro
+      - ./data/dgx-runtime/qwen:/root/.cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    entrypoint: ["vllm", "serve"]
+    command:
+      - /model
+      - --served-model-name
+      - qwen36-35b-a3b-nvfp4
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8331"
+      - --tensor-parallel-size
+      - "1"
+      - --trust-remote-code
+      - --dtype
+      - bfloat16
+      - --quantization
+      - modelopt
+      - --kv-cache-dtype
+      - fp8
+      - --attention-backend
+      - flashinfer
+      - --moe-backend
+      - marlin
+      - --kv-cache-memory-bytes
+      - ${QWEN_KV_CACHE_MEMORY_BYTES:-2G}
+      - --gpu-memory-utilization
+      - ${QWEN_GPU_MEMORY_UTILIZATION:-0.25}
+      - --max-model-len
+      - ${QWEN_MAX_MODEL_LEN:-65536}
+      - --max-num-seqs
+      - ${QWEN_MAX_NUM_SEQS:-1}
+      - --max-num-batched-tokens
+      - ${QWEN_MAX_NUM_BATCHED_TOKENS:-8192}
+      - --enable-chunked-prefill
+      - --async-scheduling
+      - --enable-prefix-caching
+      - --limit-mm-per-prompt
+      - '{"image":{"count":1,"width":1024,"height":1024},"video":0}'
+      - --mm-processor-kwargs
+      - '{"max_pixels":1048576}'
+      - --mm-processor-cache-gb
+      - "0.5"
+      - --speculative-config
+      - '{"method":"mtp","num_speculative_tokens":3,"moe_backend":"triton"}'
+      - --load-format
+      - fastsafetensors
+      - --reasoning-parser
+      - qwen3
+      - --tool-call-parser
+      - qwen3_xml
+      - --enable-auto-tool-choice
+      - --generation-config
+      - vllm
+      - --disable-uvicorn-access-log
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8331/v1/models >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 120
+      start_period: 5m
+
+  qwen3-asr:
+    build:
+      context: ./services/dgx-models/asr
+    image: sparklingkit/qwen3-asr-1.7b:vllm-0.14.0
+    container_name: sparklingkit-qwen3-asr
+    restart: unless-stopped
+    network_mode: host
+    ipc: host
+    shm_size: "16gb"
+    environment:
+      HF_HOME: /root/.cache/huggingface
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
+      TRITON_PTXAS_PATH: /opt/cuda13/bin/ptxas
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    volumes:
+      - ./data/dgx-models/Qwen/Qwen3-ASR-1.7B:/model:ro
+      - ./data/dgx-runtime/asr:/root/.cache
+      - /usr/local/cuda-13.0/bin/ptxas:/opt/cuda13/bin/ptxas:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command:
+      - qwen-asr-serve
+      - /model
+      - --served-model-name
+      - Qwen3-ASR-1.7B
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8333"
+      - --dtype
+      - bfloat16
+      - --kv-cache-memory-bytes
+      - ${ASR_KV_CACHE_MEMORY_BYTES:-8G}
+      - --gpu-memory-utilization
+      - ${ASR_GPU_MEMORY_UTILIZATION:-0.12}
+      - --max-num-seqs
+      - ${ASR_MAX_NUM_SEQS:-2}
+      - --trust-remote-code
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8333/v1/models >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 120
+      start_period: 2m
+
+  unlimited-ocr:
+    image: vllm/vllm-openai:unlimited-ocr@sha256:542961a42d9183813819a23ef3a8b50bfb4f5ef7b0fb4f8e4f56edd8445efb18
+    container_name: sparklingkit-unlimited-ocr
+    restart: unless-stopped
+    network_mode: host
+    ipc: host
+    shm_size: "16gb"
+    environment:
+      HF_HOME: /root/.cache/huggingface
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    volumes:
+      - ./data/dgx-models/baidu/Unlimited-OCR:/model:ro
+      - ./data/dgx-runtime/ocr:/root/.cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    entrypoint: ["vllm", "serve"]
+    command:
+      - /model
+      - --served-model-name
+      - Unlimited-OCR
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8332"
+      - --trust-remote-code
+      - --max-model-len
+      - ${OCR_MAX_MODEL_LEN:-32768}
+      - --max-num-seqs
+      - ${OCR_MAX_NUM_SEQS:-2}
+      - --kv-cache-memory-bytes
+      - ${OCR_KV_CACHE_MEMORY_BYTES:-5G}
+      - --gpu-memory-utilization
+      - ${OCR_GPU_MEMORY_UTILIZATION:-0.12}
+      - --logits-processors
+      - vllm.model_executor.models.unlimited_ocr:NGramPerReqLogitsProcessor
+      - --no-enable-prefix-caching
+      - --mm-processor-cache-gb
+      - "0"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8332/v1/models >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 120
+      start_period: 2m
+
+  hy-mt2:
+    build:
+      context: ./services/dgx-models/hy-mt2
+    image: sparklingkit/hy-mt2-1.8b-fp8:transformers-5.5.3
+    container_name: sparklingkit-hy-mt2
+    restart: unless-stopped
+    network_mode: host
+    ipc: host
+    shm_size: "16gb"
+    environment:
+      HF_HOME: /root/.cache/huggingface
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      MODEL_PATH: /models/tencent/Hy-MT2-1.8B-FP8
+      MODEL_NAME: Hy-MT2-1.8B-FP8
+      PORT: "8334"
+      MAX_NEW_TOKENS: ${HY_MAX_NEW_TOKENS:-4096}
+    volumes:
+      - ./data/dgx-models:/models:ro
+      - ./data/dgx-runtime/hy-mt2:/root/.cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8334/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 120
+      start_period: 3m
+
+  locateanything:
+    build:
+      context: ./services/dgx-models/grounding
+    image: sparklingkit/locateanything-3b:hybrid-la-flash
+    container_name: sparklingkit-locateanything
+    restart: unless-stopped
+    network_mode: host
+    ipc: host
+    shm_size: "32gb"
+    environment:
+      HF_HOME: /root/.cache/huggingface
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      MODEL_PATH: /models/nvidia/LocateAnything-3B
+      MODEL_NAME: nvidia/LocateAnything-3B
+      PYTHONPATH: /app:/models/nvidia/LocateAnything-3B
+      PORT: "8335"
+      DEVICE: cuda
+      DTYPE: bfloat16
+      GENERATION_MODE: hybrid
+      MAX_NEW_TOKENS: ${LOCATE_MAX_NEW_TOKENS:-2048}
+      USE_BATCH_RUNTIME: "true"
+      LA_ATTN: la_flash
+      LA_VISION_ATTN: flash_attention_2
+      LA_SCHEDULER: pipeline
+    volumes:
+      - ./data/dgx-models:/models:ro
+      - ./data/dgx-runtime/locateanything:/root/.cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8335/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 120
+      start_period: 5m
+
+  z-image:
+    build:
+      context: ./services/dgx-models/image-generation
+    image: sparklingkit/z-image-turbo:diffusers-0.40.0
+    container_name: sparklingkit-z-image-turbo
+    restart: unless-stopped
+    network_mode: host
+    ipc: host
+    shm_size: "16gb"
+    mem_limit: "26g"
+    memswap_limit: "26g"
+    environment:
+      HF_HOME: /root/.cache/huggingface
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      MODEL_PATH: /models/Tongyi-MAI/Z-Image-Turbo
+      MODEL_NAME: Z-Image-Turbo
+      PORT: "8336"
+      ATTENTION_BACKEND: ${IMAGE_ATTENTION_BACKEND:-flash}
+      DEFAULT_STEPS: ${IMAGE_DEFAULT_STEPS:-9}
+      MAX_PIXELS: ${IMAGE_MAX_PIXELS:-4194304}
+    volumes:
+      - ./data/dgx-models:/models:ro
+      - ./data/dgx-outputs/images:/outputs
+      - ./data/dgx-runtime/z-image:/root/.cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8336/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 160
+      start_period: 8m
