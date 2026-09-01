@@ -15,6 +15,10 @@ describe("job output preview", () => {
     expect(extractHtml("# Receipt\n\nTotal: 20", "document.md")).toBeNull();
   });
 
+  it("keeps embedded HTML tables inside the Markdown rendering pipeline", () => {
+    expect(extractHtml("# Receipt\n\n<table><tr><td>Total</td></tr></table>", "document.md")).toBeNull();
+  });
+
   it("wraps HTML fragments in a renderable document", () => {
     const document = htmlDocument("<table><tr><td>Total</td></tr></table>");
     expect(document).toContain("<!doctype html>");

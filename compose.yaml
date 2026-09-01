@@ -9,6 +9,7 @@ services:
       REDIS_URL: redis://redis:6379
       DATA_DIR: /data
       WORKER_ENABLED: "true"
+      SYSTEM_STATUS_BASE_URL: ${SYSTEM_STATUS_BASE_URL:-http://192.0.2.10:8330}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}

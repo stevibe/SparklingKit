@@ -9,12 +9,13 @@ import { ENDPOINT_KINDS, MODEL_INPUT_CAPABILITIES, MODULE_IDS, SEARCH_SCOPES } f
 import { getModuleContract, moduleAcceptsArtifact, moduleWorkflowForArtifact } from "../shared/module-router.js";
 import { checkEndpoint, openChatStream } from "./ai.js";
 import { modelMessagesForChat } from "./chat-messages.js";
-import { CLIENT_DIR, DATA_DIR, PORT } from "./config.js";
+import { CLIENT_DIR, DATA_DIR, PORT, SYSTEM_STATUS_BASE_URL } from "./config.js";
 import { jobEvents, publishJob } from "./events.js";
 import type { ChatMessage, EndpointKind, JobKind, PromptPreset, Settings } from "./models.js";
 import { listModules } from "./modules/registry.js";
 import { translateContent } from "./modules/translation/service.js";
 import { searchWorkspace } from "./search.js";
+import { workflowRouter } from "./workflows/routes.js";
 import { closeQueue, enqueueJob, enqueuePreset, enqueueWorkflowRun, pingRedis, startWorker, stopJobWork, stopRunWork } from "./queue.js";
 import {
   createChat,
@@ -53,6 +54,7 @@ const app = express();
 app.disable("x-powered-by");
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
+app.use("/api", workflowRouter);
 
 const upload = multer({
   dest: path.join(DATA_DIR, "tmp"),
@@ -138,6 +140,19 @@ app.get("/api/health", async (_request, response) => {
   const endpoints = Object.fromEntries(checks) as Record<EndpointKind, Awaited<ReturnType<typeof checkEndpoint>>>;
   const enabled = Object.values(endpoints).filter((endpoint) => endpoint.enabled);
   response.json({ ok: redis.ok && enabled.every((endpoint) => endpoint.ok), endpoints, redis });
+});
+
+app.get("/api/system/status", async (_request, response) => {
+  try {
+    const upstream = await fetch(`${SYSTEM_STATUS_BASE_URL.replace(/\/$/, "")}/v1/status`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!upstream.ok) throw new Error(`Status reporter returned ${upstream.status}`);
+    response.json(await upstream.json());
+  } catch (error) {
+    response.status(502).json({ error: error instanceof Error ? error.message : String(error) });
+  }
 });
 
 app.post("/api/health/:kind", async (request, response) => {
@@ -508,7 +523,8 @@ if (await fs.stat(CLIENT_DIR).then((value) => value.isDirectory()).catch(() => f
 }
 
 app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
-  const status = error instanceof z.ZodError || hasErrorCode(error, "EINVAL") ? 400 : isNotFound(error) ? 404 : hasErrorCode(error, "EEXIST") ? 409 : 500;
+  const explicitStatus = error && typeof error === "object" && "status" in error && typeof error.status === "number" ? error.status : undefined;
+  const status = explicitStatus || (error instanceof z.ZodError || hasErrorCode(error, "EINVAL") ? 400 : isNotFound(error) ? 404 : hasErrorCode(error, "EEXIST") ? 409 : 500);
   const message = error instanceof z.ZodError ? error.issues.map((issue) => issue.message).join("; ") : error instanceof Error ? error.message : String(error);
   if (status === 500) console.error(error);
   response.status(status).json({ error: message });

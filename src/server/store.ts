@@ -27,7 +27,7 @@ export async function atomicWriteJson(file: string, value: unknown) {
 }
 
 export async function initializeData() {
-  for (const folder of ["config/prompts", "jobs", "chats", "logs", "tmp"]) {
+  for (const folder of ["config/prompts", "config/workflows", "jobs", "chats", "logs", "tmp"]) {
     await fs.mkdir(path.join(DATA_DIR, folder), { recursive: true });
   }
   if (!(await exists(settingsPath))) {
@@ -68,12 +68,12 @@ function migrateBundledServiceDefaults(saved: Partial<Settings>) {
       changed = true;
     }
   };
-  move("llm", ["http://192.0.2.10:8000/v1"]);
-  move("ocr", ["http://192.0.2.10:8222/v1"]);
-  move("stt", ["http://192.0.2.10:8333/v1"]);
-  move("translation", [], true);
-  move("grounding", [], true);
-  move("image-generation", [], true);
+  move("llm", ["http://192.0.2.10:8000/v1", "http://192.0.2.10:8330/v1"]);
+  move("ocr", ["http://192.0.2.10:8222/v1", "http://192.0.2.10:8331/v1"]);
+  move("stt", ["http://192.0.2.10:8332/v1"]);
+  move("translation", ["http://192.0.2.10:8333/v1", "http://192.0.2.10:8444/v1", "http://192.0.2.10:8444"], true);
+  move("grounding", ["http://192.0.2.10:8334/v1", "http://192.0.2.10:8555/v1", "http://192.0.2.10:8555"], true);
+  move("image-generation", ["http://192.0.2.10:8335/v1", "http://192.0.2.10:8666/v1", "http://192.0.2.10:8666"], true);
   return changed;
 }
 
@@ -225,7 +225,7 @@ function normalizeJobManifest(raw: Partial<JobManifest> & Pick<JobManifest, "id"
     moduleId,
     workflowId,
     artifacts: initialArtifacts,
-    runs: raw.runs?.length ? raw.runs : [{
+    runs: raw.runs !== undefined ? raw.runs : [{
       id: "initial",
       moduleId,
       workflowId,

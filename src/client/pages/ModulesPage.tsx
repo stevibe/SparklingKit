@@ -8,6 +8,7 @@ import { moduleWorkflowForArtifact } from "../../shared/module-router";
 import { savedTranslationPreferences, translationLanguages, translationPreferenceKey } from "../translation";
 import type { Job, JobKind, ModuleDescriptor, ModuleId } from "../types";
 import { useGlobalSearch } from "../components/GlobalSearch";
+import { SearchSelect } from "../components/SearchSelect";
 
 export { translationLanguages } from "../translation";
 
@@ -346,7 +347,7 @@ export function ModulePage() {
       <div className="module-form-heading translation-form-heading"><div><h2>{translationMode === "document" ? "Translate an existing result" : "Translate text"}</h2><p>{translationMode === "document" ? "Choose a document or transcript. The translated file stays beside its source." : "Paste or type text and see the translated result without leaving this page."}</p></div><div className="module-mode-tabs" role="tablist"><button className={translationMode === "text" ? "active" : ""} onClick={() => setTranslationMode("text")}>Text</button><button className={translationMode === "document" ? "active" : ""} onClick={() => setTranslationMode("document")}>Document</button></div></div>
       {!module.configured && <div className="module-setup-note"><span>The Translation service is not configured yet.</span><Link to="/settings" state={{ backgroundLocation: location }}>Configure service</Link></div>}
       {translationMode === "document" ? <>
-        <label className="field-label">Source result<span className="select-wrap"><select value={selectedArtifact} onChange={(event) => setSelectedArtifact(event.target.value)}><option value="">Choose a document or transcript</option>{compatibleArtifacts.map(({ job, artifact, value }) => <option value={value} key={value}>{job.title} — {artifact.name}</option>)}</select></span></label>
+        <label className="field-label">Source result<SearchSelect className="module-search-select" value={selectedArtifact} onChange={setSelectedArtifact} options={compatibleArtifacts.map(({ job, artifact, value }) => ({ value, label: `${job.title} — ${artifact.name}`, keywords: `${artifact.mimeType} ${artifact.kind}` }))} placeholder="Choose a document or transcript" searchPlaceholder="Search source results" emptyMessage="No compatible results" ariaLabel="Source result" /></label>
         {!compatibleArtifacts.length && <p className="module-form-empty">Complete an OCR or transcription job first. Its primary result will appear here automatically.</p>}
         <div className="translation-document-languages"><LanguageSelect label="From" value={sourceLanguage} allowAuto onChange={setSourceLanguage} /><LanguageSelect label="To" value={targetLanguage} onChange={setTargetLanguage} /></div>
         <div className="module-form-actions"><button className="button-primary" onClick={() => { rememberLanguages(); void translate(); }} disabled={uploading || !module.configured || !selectedArtifact || !targetLanguage.trim()}>{uploading ? "Starting…" : <>Start translation<ArrowRight size={18} /></>}</button></div>
@@ -364,7 +365,7 @@ export function ModulePage() {
       {!module.configured && <div className="module-setup-note"><span>The Image generation service is not configured yet.</span><Link to="/settings" state={{ backgroundLocation: location }}>Configure service</Link></div>}
       {selectedArtifactEntry && <ImportedArtifactCard job={selectedArtifactEntry.job} artifact={selectedArtifactEntry.artifact} onRemove={() => { setSelectedArtifact(""); importedPromptRef.current = ""; setImagePrompt(""); }} compact />}
       <label className="field-label">Prompt<textarea className="input mt-2 image-prompt-input" value={imagePrompt} onChange={(event) => setImagePrompt(event.target.value)} placeholder="A quiet reading room at night, warm table lamps, rain on tall windows, editorial photography" maxLength={12000} /></label>
-      <label className="field-label">Canvas<span className="select-wrap"><select value={imageSize} onChange={(event) => setImageSize(event.target.value)}><option value="1024x1024">Square · 1024 × 1024</option><option value="1536x1024">Landscape · 1536 × 1024</option><option value="1024x1536">Portrait · 1024 × 1536</option></select></span></label>
+      <label className="field-label">Canvas<SearchSelect className="module-search-select" value={imageSize} onChange={setImageSize} options={[{ value: "1024x1024", label: "Square · 1024 × 1024" }, { value: "1536x1024", label: "Landscape · 1536 × 1024" }, { value: "1024x1536", label: "Portrait · 1024 × 1536" }]} searchPlaceholder="Search canvas sizes" ariaLabel="Canvas size" /></label>
       <div className="module-form-actions"><button className="button-primary" onClick={() => void createImage()} disabled={uploading || !module.configured || !imagePrompt.trim()}>{uploading ? "Starting…" : <><ImageIcon size={18} />Generate image</>}</button></div>
     </section> : <section className="module-coming-card">
       <span className={`module-card-icon module-card-icon-${module.id}`}><Icon size={28} /></span>
@@ -405,9 +406,10 @@ function artifactUrl(jobId: string, artifact: Job["artifacts"][number]) {
 }
 
 function LanguageSelect({ label, value, allowAuto = false, recent = [], onChange }: { label: string; value: string; allowAuto?: boolean; recent?: string[]; onChange: (value: string) => void }) {
+  const options = [...(allowAuto ? [{ value: "auto-detect", label: "Auto-detect" }] : []), ...translationLanguages.map(([language, code]) => ({ value: language, label: `${language} · ${code}`, keywords: code }))];
   return <div className="language-control">
     <span className="language-control-label">{label}</span>
     {recent.length > 0 && <div className="language-quick-list">{allowAuto && <button className={value === "auto-detect" ? "active" : ""} onClick={() => onChange("auto-detect")}>Detect</button>}{recent.map((language) => <button className={value === language ? "active" : ""} onClick={() => onChange(language)} key={language}>{language}</button>)}</div>}
-    <span className="select-wrap"><select value={value} onChange={(event) => onChange(event.target.value)}>{allowAuto && <option value="auto-detect">Auto-detect</option>}{translationLanguages.map(([language, code]) => <option value={language} key={code}>{language} · {code}</option>)}</select></span>
+    <SearchSelect value={value} options={options} onChange={onChange} ariaLabel={`${label} language`} searchPlaceholder="Search languages" emptyMessage="No languages found" />
   </div>;
 }

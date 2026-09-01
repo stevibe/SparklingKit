@@ -9,6 +9,8 @@ const JobPage = lazy(() => import("./pages/JobPage").then((module) => ({ default
 const ChatPage = lazy(() => import("./pages/ChatPage").then((module) => ({ default: module.ChatPage })));
 const ModulesPage = lazy(() => import("./pages/ModulesPage").then((module) => ({ default: module.ModulesPage })));
 const ModulePage = lazy(() => import("./pages/ModulesPage").then((module) => ({ default: module.ModulePage })));
+const WorkflowsPage = lazy(() => import("./pages/WorkflowsPage").then((module) => ({ default: module.WorkflowsPage })));
+const WorkflowEditorPage = lazy(() => import("./pages/WorkflowsPage").then((module) => ({ default: module.WorkflowEditorPage })));
 
 export function App() {
   const location = useLocation();
@@ -26,6 +28,8 @@ export function App() {
           <Route path="/jobs/:id" element={<JobPage />} />
           <Route path="/tools" element={<ModulesPage />} />
           <Route path="/tools/:moduleId" element={<ModulePage />} />
+          <Route path="/workflows" element={<WorkflowsPage />} />
+          <Route path="/workflows/:workflowId" element={<WorkflowEditorPage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/chat/:id" element={<ChatPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

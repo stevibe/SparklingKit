@@ -3,10 +3,13 @@ import { Queue, Worker } from "bullmq";
 import { REDIS_URL } from "./config.js";
 import { processJob, processPreset, processRun } from "./processor.js";
 import { createWorkflowRun, listJobs, readJob, readSettings, updateJob } from "./store.js";
+import { processFlowRun } from "./workflows/engine.js";
+import { listUnfinishedFlowRuns, updateFlowRun } from "./workflows/store.js";
 import type { ModuleId } from "./models.js";
 
 export type WorkItem =
   | { kind: "run"; jobId: string; runId: string }
+  | { kind: "flow"; jobId: string; flowRunId: string }
   /** Kept so queue entries written by v1 can drain safely after an upgrade. */
   | { kind: "job"; jobId: string }
   | { kind: "preset"; jobId: string; slug: string };
@@ -41,7 +44,7 @@ let workerConnection: Redis | undefined;
 const activeRuns = new Map<string, { jobId: string; runId?: string; controller: AbortController; finished: Promise<void> }>();
 
 function activeKey(item: WorkItem) {
-  return `${item.jobId}:${item.kind === "run" ? item.runId : "legacy"}`;
+  return `${item.jobId}:${item.kind === "run" ? item.runId : item.kind === "flow" ? item.flowRunId : "legacy"}`;
 }
 
 export async function startWorker() {
@@ -68,10 +71,11 @@ export async function startWorker() {
       const controller = new AbortController();
       let finish!: () => void;
       const finished = new Promise<void>((resolve) => { finish = resolve; });
-      const active = { jobId, runId: queueJob.data.kind === "run" ? queueJob.data.runId : undefined, controller, finished };
+      const active = { jobId, runId: queueJob.data.kind === "run" ? queueJob.data.runId : queueJob.data.kind === "flow" ? queueJob.data.flowRunId : undefined, controller, finished };
       activeRuns.set(key, active);
       try {
         if (queueJob.data.kind === "run") return await processRun(jobId, queueJob.data.runId, controller.signal);
+        if (queueJob.data.kind === "flow") return await processFlowRun(jobId, queueJob.data.flowRunId, controller.signal);
         if (queueJob.data.kind === "preset") return await processPreset(jobId, queueJob.data.slug, controller.signal);
         return await processJob(jobId, controller.signal);
       } finally {
@@ -83,16 +87,26 @@ export async function startWorker() {
   );
   worker.on("failed", (job, error) => console.error(`[worker] ${job?.id || "unknown"}: ${error.message}`));
   try {
-    const unfinished = (await listJobs()).filter((job) => ["queued", "preparing", "processing", "merging"].includes(job.status));
+    const unfinishedFlows = await listUnfinishedFlowRuns();
+    const flowJobIds = new Set(unfinishedFlows.map((flow) => flow.jobId));
+    const unfinished = (await listJobs()).filter((job) => !flowJobIds.has(job.id) && ["queued", "preparing", "processing", "merging"].includes(job.status));
     for (const job of unfinished) {
       const run = [...job.runs].reverse().find((candidate) => ["queued", "preparing", "processing", "merging"].includes(candidate.status)) || job.runs.at(-1);
       if (!run) continue;
       const existing = await workQueue.getJob(`run-${job.id}-${run.id}`) || await workQueue.getJob(`job-${job.id}`);
       if (!existing) await enqueueJob(job.id);
     }
+    for (const flow of unfinishedFlows) {
+      const existing = await workQueue.getJob(`flow-${flow.jobId}-${flow.id}`);
+      if (!existing) await enqueueFlowRun(flow.jobId, flow.id);
+    }
   } catch (error) {
     console.error(`[queue recovery] ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+export async function enqueueFlowRun(jobId: string, flowRunId: string) {
+  await workQueue.add("flow", { kind: "flow", jobId, flowRunId }, { jobId: `flow-${jobId}-${flowRunId}` });
 }
 
 export async function enqueueJob(jobId: string) {
@@ -131,6 +145,11 @@ export async function stopRunWork(jobId: string, runId: string) {
   return stopMatchingWork(jobId, runId);
 }
 
+export async function stopFlowWork(jobId: string, flowRunId: string) {
+  await updateFlowRun(jobId, flowRunId, { cancelRequested: true, stage: "Stopping…" });
+  return stopMatchingWork(jobId, flowRunId);
+}
+
 async function stopMatchingWork(jobId: string, runId?: string) {
   let stopped = false;
   const abortActive = async () => {
@@ -153,7 +172,8 @@ async function stopMatchingWork(jobId: string, runId?: string) {
     workQueue.getJobs(["paused"]),
   ]);
   for (const queued of groups.flat()) {
-    if (queued.data.jobId !== jobId || (runId && (queued.data.kind !== "run" || queued.data.runId !== runId))) continue;
+    const queuedRunId = queued.data.kind === "run" ? queued.data.runId : queued.data.kind === "flow" ? queued.data.flowRunId : undefined;
+    if (queued.data.jobId !== jobId || (runId && queuedRunId !== runId)) continue;
     try {
       await queued.remove();
       stopped = true;

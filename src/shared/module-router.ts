@@ -52,7 +52,7 @@ export const MODULE_CONTRACTS: readonly ModuleContract[] = [
     providerKind: "stt",
     accepts: ["source-audio", "source-video"],
     produces: ["transcript", "subtitle", "structured-data"],
-    handoff: { mode: "upload" },
+    handoff: { mode: "workflow", workflows: [{ workflowId: "transcription.default", accepts: ["source-audio", "source-video"] }], maxInputs: 100 },
     actionLabel: "Transcribe",
     actionDescription: "Turn this recording into text",
     implementation: "ready",

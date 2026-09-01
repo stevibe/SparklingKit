@@ -1,28 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import ReactMarkdown, { type Components } from "react-markdown";
-import rehypeRaw from "rehype-raw";
-import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import remarkGfm from "remark-gfm";
 import { ArrowRight, ArrowUp, Bot, Check, ChevronLeft, Copy, MessageCircle, Paperclip, Pencil, Plus, Search, Square, Trash2, UserRound } from "lucide-react";
 import { api, streamChat } from "../api";
 import { writeClipboardText } from "../clipboard";
 import { cn, ConfirmDialog, RenameDialog, timeAgo } from "../components/ui";
+import { MarkdownRenderer } from "../components/MarkdownRenderer";
 import type { Chat, ChatMessage, Job } from "../types";
 import { useGlobalSearch } from "../components/GlobalSearch";
-
-const markdownComponents: Components = {
-  a: ({ node: _node, href, ...props }) => {
-    const external = Boolean(href && /^(https?:)?\/\//.test(href));
-    return <a href={href} {...props} target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined} />;
-  },
-  table: ({ node: _node, ...props }) => <div className="message-table-wrap"><table {...props} /></div>,
-};
-
-const markdownSanitizeSchema = {
-  ...defaultSchema,
-  tagNames: [...(defaultSchema.tagNames || []), "u"],
-};
 
 export function ChatPage() {
   const { id } = useParams();
@@ -313,5 +297,5 @@ export function formatMessageTime(value: string, timezone: string) {
 }
 
 export function ChatMarkdown({ children }: { children: string }) {
-  return <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]]} components={markdownComponents}>{children}</ReactMarkdown>;
+  return <MarkdownRenderer>{children}</MarkdownRenderer>;
 }

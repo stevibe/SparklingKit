@@ -18,21 +18,23 @@ export type JobStatus =
   | "failed"
   | "cancelled";
 
-export type ArtifactKind =
-  | "source-audio"
-  | "source-video"
-  | "source-image"
-  | "source-pdf"
-  | "document"
-  | "transcript"
-  | "subtitle"
-  | "translation"
-  | "annotations"
-  | "redacted-document"
-  | "grounded-image"
-  | "generated-image"
-  | "structured-data"
-  | "text";
+export const ARTIFACT_KINDS = [
+  "source-audio",
+  "source-video",
+  "source-image",
+  "source-pdf",
+  "document",
+  "transcript",
+  "subtitle",
+  "translation",
+  "annotations",
+  "redacted-document",
+  "grounded-image",
+  "generated-image",
+  "structured-data",
+  "text",
+] as const;
+export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
 
 export type ArtifactRole = "source" | "primary" | "supplementary";
 
@@ -228,4 +230,95 @@ export interface SearchResponse {
   scope: SearchScope;
   results: SearchResult[];
   total: number;
+}
+
+export const WORKFLOW_NODE_TYPES = ["input", "module", "select", "if", "switch", "merge", "end", "fail"] as const;
+export type WorkflowNodeType = (typeof WORKFLOW_NODE_TYPES)[number];
+export const WORKFLOW_SERVICE_IDS = ["ocr", "transcription", "translation", "grounding", "text-to-image", "llm-prompt", "chat"] as const;
+export type WorkflowServiceId = (typeof WORKFLOW_SERVICE_IDS)[number];
+
+export interface WorkflowNode {
+  id: string;
+  type: WorkflowNodeType;
+  position: { x: number; y: number };
+  config: Record<string, unknown>;
+}
+
+export interface WorkflowEdgeEndpoint {
+  nodeId: string;
+  portId: string;
+}
+
+export interface WorkflowEdge {
+  id: string;
+  from: WorkflowEdgeEndpoint;
+  to: WorkflowEdgeEndpoint;
+  artifactKinds: ArtifactKind[];
+}
+
+export interface WorkflowDefinition {
+  schemaVersion: 1;
+  id: string;
+  revision: number;
+  name: string;
+  description: string;
+  enabled: boolean;
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  ui: { viewport: { x: number; y: number; zoom: number } };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkflowValidationIssue {
+  level: "error" | "warning";
+  code: string;
+  message: string;
+  nodeId?: string;
+  edgeId?: string;
+}
+
+export interface WorkflowValidationResult {
+  valid: boolean;
+  issues: WorkflowValidationIssue[];
+}
+
+export type FlowRunStatus = "queued" | "running" | "blocked" | "succeeded" | "failed" | "cancelled";
+export type FlowNodeStatus = "pending" | "ready" | "running" | "succeeded" | "failed" | "skipped" | "blocked" | "cancelled";
+
+export interface FlowNodeRun {
+  nodeId: string;
+  status: FlowNodeStatus;
+  attempt: number;
+  inputArtifactIds: string[];
+  outputArtifactIds: string[];
+  childRunIds: string[];
+  selectedPortIds: string[];
+  startedAt?: string;
+  completedAt?: string;
+  error?: string;
+  detail?: string;
+}
+
+export interface FlowRun {
+  schemaVersion: 1;
+  id: string;
+  workflowId: string;
+  workflowRevision: number;
+  jobId: string;
+  status: FlowRunStatus;
+  progress: number;
+  stage: string;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  cancelRequested?: boolean;
+  inputArtifactIds: string[];
+  outputArtifactIds: string[];
+  variables: Record<string, unknown>;
+  definition: WorkflowDefinition;
+  nodes: Record<string, FlowNodeRun>;
+  error?: string;
+  chatId?: string;
 }

@@ -1,4 +1,4 @@
-import type { Chat, EndpointConfig, EndpointHealth, EndpointKind, Health, Job, ModuleDescriptor, ModuleId, PromptPreset, SearchResponse, SearchScope, Settings, WorkflowRun } from "./types";
+import type { Chat, EndpointConfig, EndpointHealth, EndpointKind, FlowRun, Health, Job, ModuleDescriptor, ModuleId, PromptPreset, SearchResponse, SearchScope, Settings, SparkStatus, WorkflowDefinition, WorkflowRun, WorkflowValidationResult } from "./types";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -19,11 +19,24 @@ function encodedPath(value: string) {
 
 export const api = {
   health: () => request<Health>("/api/health"),
+  systemStatus: () => request<SparkStatus>("/api/system/status"),
   testEndpoint: (kind: EndpointKind, endpoint: EndpointConfig) =>
     request<EndpointHealth>(`/api/health/${kind}`, { method: "POST", body: JSON.stringify({ endpoint }) }),
   settings: () => request<Settings>("/api/settings"),
   saveSettings: (settings: Settings) => request<Settings>("/api/settings", { method: "PUT", body: JSON.stringify(settings) }),
   modules: () => request<ModuleDescriptor[]>("/api/modules"),
+  workflowNodes: () => request<{ services: Array<{ id: string; title: string; accepts: string[]; produces: string[]; terminal?: boolean; configured: boolean }>; artifactKinds: string[] }>("/api/workflow-nodes"),
+  workflows: () => request<WorkflowDefinition[]>("/api/workflows"),
+  workflow: (id: string) => request<WorkflowDefinition>(`/api/workflows/${id}`),
+  createWorkflow: (definition: WorkflowDefinition) => request<{ definition: WorkflowDefinition; validation: WorkflowValidationResult }>("/api/workflows", { method: "POST", body: JSON.stringify(definition) }),
+  saveWorkflow: (definition: WorkflowDefinition) => request<{ definition: WorkflowDefinition; validation: WorkflowValidationResult }>(`/api/workflows/${definition.id}`, { method: "PUT", body: JSON.stringify(definition) }),
+  validateWorkflow: (definition: WorkflowDefinition) => request<WorkflowValidationResult>(`/api/workflows/${definition.id}/validate`, { method: "POST", body: JSON.stringify(definition) }),
+  deleteWorkflow: (id: string) => request<void>(`/api/workflows/${id}`, { method: "DELETE" }),
+  workflowRuns: () => request<FlowRun[]>("/api/workflow-runs"),
+  jobWorkflowRuns: (jobId: string) => request<FlowRun[]>(`/api/jobs/${jobId}/flows`),
+  workflowRun: (jobId: string, flowRunId: string) => request<FlowRun>(`/api/jobs/${jobId}/flows/${flowRunId}`),
+  cancelWorkflowRun: (jobId: string, flowRunId: string) => request<FlowRun>(`/api/jobs/${jobId}/flows/${flowRunId}/cancel`, { method: "POST" }),
+  retryWorkflowRun: (jobId: string, flowRunId: string) => request<FlowRun>(`/api/jobs/${jobId}/flows/${flowRunId}/retry`, { method: "POST" }),
   search: (query: string, scope: SearchScope = "all", moduleId?: ModuleId, signal?: AbortSignal) => {
     const params = new URLSearchParams({ q: query, scope });
     if (moduleId) params.set("moduleId", moduleId);
@@ -51,6 +64,28 @@ export const api = {
   deleteChat: (id: string) => request<void>(`/api/chats/${id}`, { method: "DELETE" }),
   createChat: (linkedJobId?: string) => request<Chat>("/api/chats", { method: "POST", body: JSON.stringify({ linkedJobId }) }),
 };
+
+export function startWorkflow(id: string, input: { files?: File[]; text?: string; title?: string; jobId?: string; inputArtifactIds?: string[]; variables?: Record<string, unknown> }, onProgress: (value: number) => void) {
+  return new Promise<{ job: Job; flow: FlowRun }>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const form = new FormData();
+    input.files?.forEach((file) => form.append("files", file));
+    if (input.text) form.append("text", input.text);
+    if (input.title) form.append("title", input.title);
+    if (input.jobId) form.append("jobId", input.jobId);
+    if (input.inputArtifactIds) form.append("inputArtifactIds", JSON.stringify(input.inputArtifactIds));
+    form.append("variables", JSON.stringify(input.variables || {}));
+    xhr.open("POST", `/api/workflows/${encodeURIComponent(id)}/runs`);
+    xhr.upload.onprogress = (event) => event.lengthComputable && onProgress(Math.round((event.loaded / event.total) * 100));
+    xhr.onload = () => {
+      const payload = JSON.parse(xhr.responseText || "{}") as { job: Job; flow: FlowRun; error?: string };
+      if (xhr.status >= 200 && xhr.status < 300) resolve(payload);
+      else reject(new Error(payload.error || `Could not start workflow (${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new Error("Could not start workflow: network error"));
+    xhr.send(form);
+  });
+}
 
 export function uploadJob(files: File[], type: Job["type"], onProgress: (value: number) => void, moduleId?: ModuleId) {
   return new Promise<Job>((resolve, reject) => {

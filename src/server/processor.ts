@@ -132,10 +132,13 @@ function durationLabel(seconds: number) {
   return `${minutes}m`;
 }
 
-export async function processAudio(job: JobManifest, signal?: AbortSignal) {
+export async function processAudio(job: JobManifest, signal?: AbortSignal, run?: WorkflowRun) {
   const settings = await readSettings();
   const root = jobDir(job.id);
-  const planFile = path.join(root, "work", "audio-plan.json");
+  const derivedRun = run && job.runs.findIndex((candidate) => candidate.id === run.id) > 0;
+  const runWork = derivedRun ? path.join(root, "work", "transcription", run.id) : path.join(root, "work");
+  await fs.mkdir(runWork, { recursive: true });
+  const planFile = path.join(runWork, "audio-plan.json");
   const configuredPlan = {
     version: 1,
     chunkTargetSec: settings.audio.chunkTargetSec,
@@ -151,12 +154,19 @@ export async function processAudio(job: JobManifest, signal?: AbortSignal) {
   }
   const chunks: AudioChunk[] = [];
   let timelineOffset = 0;
+  const selectedArtifacts = (run?.inputArtifactIds || [])
+    .map((id) => job.artifacts.find((artifact) => artifact.id === id))
+    .filter((artifact): artifact is NonNullable<typeof artifact> => Boolean(artifact && ["source-audio", "source-video"].includes(artifact.kind)));
+  const audioInputs = selectedArtifacts.length
+    ? selectedArtifacts.map((artifact) => ({ name: artifact.name, file: safeArtifactPath(job.id, artifact.path) }))
+    : job.inputs.map((input) => ({ name: input.name, file: path.join(root, "input", input.storedName) }));
+  if (!audioInputs.length) throw new Error("Choose at least one recording to transcribe");
   await progress(job.id, { status: "preparing", progress: 4, stage: "Normalizing audio", startedAt: new Date().toISOString() });
-  for (const [index, input] of job.inputs.entries()) {
+  for (const [index, input] of audioInputs.entries()) {
     await assertNotCancelled(job.id, signal);
-    const normalized = path.join(root, "work", `normalized-${String(index + 1).padStart(3, "0")}.wav`);
-    await normalizeAudio(path.join(root, "input", input.storedName), normalized, plan.sampleRate, signal);
-    const fileChunks = await splitAudio(normalized, path.join(root, "work", `chunks-${index + 1}`), plan.chunkTargetSec, plan.chunkOverlapSec, signal);
+    const normalized = path.join(runWork, `normalized-${String(index + 1).padStart(3, "0")}.wav`);
+    await normalizeAudio(input.file, normalized, plan.sampleRate, signal);
+    const fileChunks = await splitAudio(normalized, path.join(runWork, `chunks-${index + 1}`), plan.chunkTargetSec, plan.chunkOverlapSec, signal);
     chunks.push(...fileChunks.map((chunk) => ({ ...chunk, start: chunk.start + timelineOffset, end: chunk.end + timelineOffset })));
     timelineOffset += (fileChunks.at(-1)?.end || 0) + 1;
   }
@@ -173,7 +183,7 @@ export async function processAudio(job: JobManifest, signal?: AbortSignal) {
       detail,
     });
     try {
-      const checkpoint = path.join(root, "work", `transcript-${String(index + 1).padStart(4, "0")}.json`);
+      const checkpoint = path.join(runWork, `transcript-${String(index + 1).padStart(4, "0")}.json`);
       let result: TranscriptResult;
       try {
         result = JSON.parse(await fs.readFile(checkpoint, "utf8")) as TranscriptResult;
@@ -181,7 +191,7 @@ export async function processAudio(job: JobManifest, signal?: AbortSignal) {
         result = await transcribeChunk(
           settings,
           chunk,
-          path.join(root, "work", `adaptive-${String(index + 1).padStart(4, "0")}`),
+          path.join(runWork, `adaptive-${String(index + 1).padStart(4, "0")}`),
           "root",
           signal,
           () => progress(job.id, { stage: "Retrying a difficult section", detail }),
@@ -203,13 +213,16 @@ export async function processAudio(job: JobManifest, signal?: AbortSignal) {
   const md = `# ${job.title}\n\n${text || "_No speech detected._"}\n`;
   const srt = segments.map((segment, index) => `${index + 1}\n${srtTimestamp(segment.start)} --> ${srtTimestamp(segment.end)}\n${segment.text}\n`).join("\n");
   const vtt = `WEBVTT\n\n${segments.map((segment) => `${vttTimestamp(segment.start)} --> ${vttTimestamp(segment.end)}\n${segment.text}\n`).join("\n")}`;
+  const suffix = (run?.id || "derived").replace(/^run-/, "").slice(0, 8);
+  const stem = job.outputFiles.includes("transcript.md") ? `transcript-${suffix}` : "transcript";
+  const names = [`${stem}.md`, `${stem}.json`, `${stem}.srt`, `${stem}.vtt`];
   await Promise.all([
-    fs.writeFile(safeOutputPath(job.id, "transcript.md"), md),
-    fs.writeFile(safeOutputPath(job.id, "transcript.json"), `${JSON.stringify({ text, segments }, null, 2)}\n`),
-    fs.writeFile(safeOutputPath(job.id, "transcript.srt"), srt),
-    fs.writeFile(safeOutputPath(job.id, "transcript.vtt"), vtt),
+    fs.writeFile(safeOutputPath(job.id, names[0]), md),
+    fs.writeFile(safeOutputPath(job.id, names[1]), `${JSON.stringify({ text, segments }, null, 2)}\n`),
+    fs.writeFile(safeOutputPath(job.id, names[2]), srt),
+    fs.writeFile(safeOutputPath(job.id, names[3]), vtt),
   ]);
-  return { outputFiles: ["transcript.md", "transcript.json", "transcript.srt", "transcript.vtt"], warnings };
+  return { outputFiles: [...new Set([...job.outputFiles, ...names])], warnings };
 }
 
 function mergeOverlappingText(parts: string[]) {
@@ -282,23 +295,31 @@ export async function processImages(job: JobManifest, signal?: AbortSignal, run?
   return { outputFiles: [...new Set([...job.outputFiles, outputName])], warnings };
 }
 
-export async function processPdfs(job: JobManifest, signal?: AbortSignal) {
+export async function processPdfs(job: JobManifest, signal?: AbortSignal, run?: WorkflowRun) {
   const settings = await readSettings();
   const root = jobDir(job.id);
   const allPages: string[] = [];
   let globalPage = 0;
   const warnings: string[] = [];
-  const checkpointsDir = path.join(root, "work", "ocr-pages");
+  const derivedRun = run && job.runs.findIndex((candidate) => candidate.id === run.id) > 0;
+  const checkpointsDir = derivedRun ? path.join(root, "work", "ocr-pages", run.id) : path.join(root, "work", "ocr-pages");
   await fs.mkdir(checkpointsDir, { recursive: true });
+  const selectedArtifacts = (run?.inputArtifactIds || [])
+    .map((id) => job.artifacts.find((artifact) => artifact.id === id))
+    .filter((artifact): artifact is NonNullable<typeof artifact> => Boolean(artifact && artifact.kind === "source-pdf"));
+  const pdfInputs = selectedArtifacts.length
+    ? selectedArtifacts.map((artifact) => ({ name: artifact.name, file: safeArtifactPath(job.id, artifact.path) }))
+    : job.inputs.filter((input) => input.mimeType === "application/pdf" || input.name.toLowerCase().endsWith(".pdf")).map((input) => ({ name: input.name, file: path.join(root, "input", input.storedName) }));
+  if (!pdfInputs.length) throw new Error("Choose at least one PDF to read");
   await progress(job.id, { status: "preparing", progress: 3, stage: "Preparing PDFs for OCR", startedAt: new Date().toISOString() });
-  for (const [fileIndex, input] of job.inputs.entries()) {
+  for (const [fileIndex, input] of pdfInputs.entries()) {
     await assertNotCancelled(job.id, signal);
-    const inputFile = path.join(root, "input", input.storedName);
+    const inputFile = input.file;
     await progress(job.id, { status: "preparing", progress: 8, stage: "Preparing documents", detail: input.name });
     const pageFiles = await rasterizePdf(inputFile, path.join(root, "work", `pdf-${fileIndex + 1}`), settings.pdf.dpi, signal);
     for (const [pageIndex, pageFile] of pageFiles.entries()) {
       await assertNotCancelled(job.id, signal);
-      const overall = (fileIndex + pageIndex / Math.max(pageFiles.length, 1)) / job.inputs.length;
+      const overall = (fileIndex + pageIndex / Math.max(pageFiles.length, 1)) / pdfInputs.length;
       await progress(job.id, {
         status: "processing",
         progress: 12 + Math.round(overall * 76),
@@ -329,8 +350,10 @@ export async function processPdfs(job: JobManifest, signal?: AbortSignal) {
   await assertNotCancelled(job.id, signal);
   if (!allPages.length) throw new Error("No text or pages could be extracted");
   await progress(job.id, { status: "merging", progress: 94, stage: "Assembling document", warnings });
-  await fs.writeFile(safeOutputPath(job.id, "document.md"), `# ${job.title}\n\n${allPages.join("\n\n---\n\n")}\n`);
-  return { outputFiles: ["document.md"], warnings };
+  const baseName = "document.md";
+  const outputName = job.outputFiles.includes(baseName) ? `document.ocr-${(run?.id || "derived").replace(/^run-/, "").slice(0, 8)}.md` : baseName;
+  await fs.writeFile(safeOutputPath(job.id, outputName), `# ${job.title}\n\n${allPages.join("\n\n---\n\n")}\n`);
+  return { outputFiles: [...new Set([...job.outputFiles, outputName])], warnings };
 }
 
 export async function processJob(id: string, signal?: AbortSignal) {

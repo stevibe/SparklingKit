@@ -7,6 +7,7 @@ import { cn, ConfirmDialog, formatBytes, JobIcon, Progress, StatusBadge, timeAgo
 import { savedTranslationPreferences, translationLanguages, translationPreferenceKey, type TranslationPreferences } from "../translation";
 import type { Job, JobKind, ModuleDescriptor, ModuleId } from "../types";
 import { useGlobalSearch } from "../components/GlobalSearch";
+import { SearchSelect } from "../components/SearchSelect";
 
 const workflowCopy: Record<JobKind, { label: string; description: string }> = {
   audio: { label: "Transcription", description: "Audio or video to transcript and subtitles" },
@@ -316,7 +317,7 @@ export function Dashboard() {
           <form className="workbench-chat-composer" onSubmit={startChat}><textarea value={chatPrompt} onChange={(event) => setChatPrompt(event.target.value)} placeholder="What are you working on?" rows={2} /><button className="send-button" disabled={startingChat || !chatPrompt.trim() || !configured("chat")} aria-label="Start conversation"><ArrowRight size={18} /></button></form>
           {chatError && <p className="form-error">{chatError}</p>}
         </section>
-        <Link to="/tools/grounding" className="workbench-card workbench-grounding-link"><span className="workbench-card-icon grounding"><ScanSearch size={22} /></span><strong>Find something in an image</strong><ArrowRight size={19} /></Link>
+        <Link to="/tools/grounding" className="workbench-card workbench-grounding-link"><WorkbenchHeading icon={<ScanSearch size={22} />} title="Find something in an image" /><ArrowRight size={19} /></Link>
       </div>
     </div>
     </section>
@@ -338,7 +339,8 @@ function WorkbenchHeading({ icon, title }: { icon: ReactNode; title: string }) {
 }
 
 function CompactLanguageSelect({ label, value, allowAuto = false, onChange }: { label: string; value: string; allowAuto?: boolean; onChange: (value: string) => void }) {
-  return <label className="compact-language-select"><small>{label}</small><select value={value} onChange={(event) => onChange(event.target.value)}>{allowAuto && <option value="auto-detect">Auto-detect</option>}{translationLanguages.map(([language, code]) => <option value={language} key={code}>{language}</option>)}</select></label>;
+  const options = [...(allowAuto ? [{ value: "auto-detect", label: "Auto-detect" }] : []), ...translationLanguages.map(([language, code]) => ({ value: language, label: language, keywords: code }))];
+  return <div className="compact-language-select"><small>{label}</small><SearchSelect value={value} options={options} onChange={onChange} ariaLabel={`${label} language`} searchPlaceholder="Search languages" emptyMessage="No languages found" /></div>;
 }
 
 function JobRow({ job, onDelete, compact = false }: { job: Job; onDelete: () => void; compact?: boolean }) {

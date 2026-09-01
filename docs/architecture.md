@@ -21,6 +21,8 @@ Job / work item
 
 Redis coordinates execution. The `/data` directory owns durable state and must be sufficient to inspect, back up, and recover work.
 
+The visual workflow layer composes these same modules and artifacts as a versioned, file-based DAG. It does not introduce another execution or storage model. See [`workflows.md`](workflows.md).
+
 ## Domain boundaries
 
 ### Module
@@ -64,9 +66,11 @@ data/
 ├── config/
 │   ├── settings.json
 │   ├── secrets.json
-│   └── prompts/
+│   ├── prompts/
+│   └── workflows/               # saved workflow definitions
 ├── jobs/<job-id>/
 │   ├── job.json
+│   ├── flows/                   # durable flow-run snapshots
 │   ├── input/
 │   ├── work/
 │   └── output/

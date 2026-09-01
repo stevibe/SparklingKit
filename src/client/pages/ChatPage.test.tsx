@@ -24,7 +24,7 @@ describe("ChatMarkdown", () => {
     expect(html).toContain("<em>italic</em>");
     expect(html).toContain("<u>underlined</u>");
     expect(html).toContain("<hr/>");
-    expect(html).toContain('class="message-table-wrap"');
+    expect(html).toContain('class="markdown-table-wrap"');
     expect(html).toContain('<a href="https://openai.com" target="_blank" rel="noreferrer">');
     expect(html).not.toContain("<script");
   });

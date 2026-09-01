@@ -6,43 +6,44 @@ export const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(ROOT_DIR,
 export const CLIENT_DIR = path.resolve(ROOT_DIR, "dist-client");
 export const PORT = Number(process.env.PORT || 8787);
 export const REDIS_URL = process.env.REDIS_URL || "redis://127.0.0.1:6379";
+export const SYSTEM_STATUS_BASE_URL = process.env.SYSTEM_STATUS_BASE_URL || "http://192.0.2.10:8330";
 
 export const defaultSettings: Settings = {
   schemaVersion: 2,
   endpoints: {
     llm: {
-      baseUrl: process.env.LLM_BASE_URL || "http://192.0.2.10:8330/v1",
+      baseUrl: process.env.LLM_BASE_URL || "http://192.0.2.10:8331/v1",
       model: process.env.LLM_MODEL || "qwen36-35b-a3b-nvfp4",
       apiKey: process.env.LLM_API_KEY || "",
       enabled: true,
-      capabilities: ["text"],
+      capabilities: ["text", "image"],
     },
     ocr: {
-      baseUrl: process.env.OCR_BASE_URL || "http://192.0.2.10:8331/v1",
+      baseUrl: process.env.OCR_BASE_URL || "http://192.0.2.10:8332/v1",
       model: process.env.OCR_MODEL || "Unlimited-OCR",
       apiKey: process.env.OCR_API_KEY || "",
       enabled: true,
     },
     stt: {
-      baseUrl: process.env.STT_BASE_URL || "http://192.0.2.10:8332/v1",
+      baseUrl: process.env.STT_BASE_URL || "http://192.0.2.10:8333/v1",
       model: process.env.STT_MODEL || "Qwen3-ASR-1.7B",
       apiKey: process.env.STT_API_KEY || "",
       enabled: true,
     },
     translation: {
-      baseUrl: process.env.TRANSLATION_BASE_URL || "http://192.0.2.10:8333/v1",
+      baseUrl: process.env.TRANSLATION_BASE_URL || "http://192.0.2.10:8334/v1",
       model: process.env.TRANSLATION_MODEL || "Hy-MT2-1.8B-FP8",
       apiKey: process.env.TRANSLATION_API_KEY || "",
       enabled: true,
     },
     grounding: {
-      baseUrl: process.env.GROUNDING_BASE_URL || "http://192.0.2.10:8334/v1",
+      baseUrl: process.env.GROUNDING_BASE_URL || "http://192.0.2.10:8335/v1",
       model: process.env.GROUNDING_MODEL || "nvidia/LocateAnything-3B",
       apiKey: process.env.GROUNDING_API_KEY || "",
       enabled: true,
     },
     "image-generation": {
-      baseUrl: process.env.IMAGE_GENERATION_BASE_URL || "http://192.0.2.10:8335/v1",
+      baseUrl: process.env.IMAGE_GENERATION_BASE_URL || "http://192.0.2.10:8336/v1",
       model: process.env.IMAGE_GENERATION_MODEL || "Z-Image-Turbo",
       apiKey: process.env.IMAGE_GENERATION_API_KEY || "",
       enabled: true,

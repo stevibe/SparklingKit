@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import { generateImage } from "../../ai.js";
 import { publishJob } from "../../events.js";
 import type { JobManifest, WorkflowRun } from "../../models.js";
-import { readSettings, safeOutputPath, updateJob } from "../../store.js";
+import { readSettings, safeArtifactPath, safeOutputPath, updateJob } from "../../store.js";
 import type { WorkflowExecutionResult } from "../executors.js";
 
 async function report(jobId: string, patch: Parameters<typeof updateJob>[1]) {
@@ -14,7 +14,13 @@ export async function processTextToImage(job: JobManifest, run: WorkflowRun, sig
   const settings = await readSettings();
   const endpoint = settings.endpoints["image-generation"];
   if (!endpoint.enabled || !endpoint.baseUrl || !endpoint.model) throw new Error("Configure and enable the Image generation service in Settings first");
-  const prompt = typeof run.params.prompt === "string" ? run.params.prompt.trim() : "";
+  let prompt = typeof run.params.prompt === "string" ? run.params.prompt.trim() : "";
+  if (!prompt && run.inputArtifactIds[0]) {
+    const artifact = job.artifacts.find((candidate) => candidate.id === run.inputArtifactIds[0]);
+    if (artifact && ["document", "transcript", "translation", "redacted-document", "text"].includes(artifact.kind)) {
+      prompt = (await fs.readFile(safeArtifactPath(job.id, artifact.path), "utf8")).trim().slice(0, 12_000);
+    }
+  }
   if (!prompt) throw new Error("This image-generation run has no prompt");
   const size = typeof run.params.size === "string" ? run.params.size : "1024x1024";
   await report(job.id, { status: "preparing", progress: 8, stage: "Preparing image request", startedAt: run.startedAt || new Date().toISOString() });

@@ -1,0 +1,39 @@
+services:
+  dgx-status:
+    build:
+      context: ./services/dgx-status
+    image: sparklingkit/dgx-spark-status:0.1.0
+    container_name: sparklingkit-dgx-status
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=16m
+    environment:
+      PORT: "8330"
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: utility
+      LLM_PORT: "8331"
+      OCR_PORT: "8332"
+      ASR_PORT: "8333"
+      TRANSLATION_PORT: "8334"
+      GROUNDING_PORT: "8335"
+      IMAGE_GENERATION_PORT: "8336"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8330/health', timeout=2)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

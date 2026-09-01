@@ -6,12 +6,13 @@ The included defaults point to the DGX Spark services:
 
 | Workload | Endpoint | Model |
 | --- | --- | --- |
-| Chat and presets | `http://192.0.2.10:8330/v1` | `qwen36-35b-a3b-nvfp4` |
-| OCR | `http://192.0.2.10:8331/v1` | `Unlimited-OCR` |
-| Speech to text | `http://192.0.2.10:8332/v1` | `Qwen3-ASR-1.7B` |
-| Translation | `http://192.0.2.10:8333/v1` | `Hy-MT2-1.8B-FP8` |
-| Grounding | `http://192.0.2.10:8334/v1` | `nvidia/LocateAnything-3B` |
-| Image generation | `http://192.0.2.10:8335/v1` | `Z-Image-Turbo` |
+| DGX Spark status | `http://192.0.2.10:8330/v1/status` | Host, GPU, processes, and model health |
+| Multimodal chat and presets | `http://192.0.2.10:8331/v1` | `qwen36-35b-a3b-nvfp4` |
+| OCR | `http://192.0.2.10:8332/v1` | `Unlimited-OCR` |
+| Speech to text | `http://192.0.2.10:8333/v1` | `Qwen3-ASR-1.7B` |
+| Translation | `http://192.0.2.10:8334/v1` | `Hy-MT2-1.8B-FP8` |
+| Grounding | `http://192.0.2.10:8335/v1` | `nvidia/LocateAnything-3B` |
+| Image generation | `http://192.0.2.10:8336/v1` | `Z-Image-Turbo` |
 
 Every service can be enabled, configured, and tested independently from **Settings → Model services**. OCR, Transcription, Translation, Grounding, Text to image, and Chat are executable modules.
 
@@ -24,6 +25,13 @@ docker compose up --build
 ```
 
 Open [http://localhost:8787](http://localhost:8787). Application files are written to `./data`; Redis queue state is stored in the named `redis-data` volume.
+
+On a DGX Spark, the lightweight status reporter is available through the Spark
+Compose overlay:
+
+```bash
+docker compose -f compose.spark.yaml up -d --build dgx-status
+```
 
 The image is compatible with `linux/amd64` and `linux/arm64`. It includes `ffmpeg`, `ffprobe`, `pdftotext`, and `pdftoppm`.
 
@@ -44,6 +52,8 @@ The Workbench is a task grid for the most common actions: format-aware file inta
 
 Each module workspace includes a flat, full-height history rail at the right edge on desktop. Source files and generated outputs are both selectable and previewable from a job's file explorer.
 
+The **Workflows** workspace provides a typed drag-and-drop graph for connecting services. Definitions are ordinary versioned JSON files. Input, Select, If, Switch, Merge, End, and Fail nodes can be combined with OCR, Transcription, Translation, Grounding, Text to image, LLM Prompt, and Create chat nodes. The same capability router used by module handoffs prevents incompatible connections.
+
 Useful checks:
 
 ```bash
@@ -59,9 +69,11 @@ data/
 ├── config/
 │   ├── settings.json
 │   ├── secrets.json
-│   └── prompts/*.json
+│   ├── prompts/*.json
+│   └── workflows/*.json
 ├── jobs/<timestamp_name>/
 │   ├── job.json
+│   ├── flows/*.json
 │   ├── input/
 │   ├── work/
 │   └── output/
@@ -81,6 +93,11 @@ data/
 - `POST /api/modules/grounding/jobs` — upload one image and locate up to 12 text queries
 - `GET /api/jobs` and `GET /api/jobs/:id`
 - `GET /api/modules` — discover capabilities, compatible artifacts, routes, and provider readiness
+- `GET/POST /api/workflows` — list or create JSON workflow definitions
+- `PUT /api/workflows/:workflowId` and `POST /api/workflows/:workflowId/validate`
+- `POST /api/workflows/:workflowId/runs` — start a flow from uploaded files, text, or existing artifacts
+- `GET /api/jobs/:id/flows/:flowRunId` — inspect durable per-node state
+- `POST /api/jobs/:id/flows/:flowRunId/cancel` and `/retry`
 - `GET /api/jobs/:id/artifacts` and `GET /api/jobs/:id/runs`
 - `POST /api/jobs/:id/runs` — start a compatible downstream workflow such as Translation
 - `POST /api/jobs/:id/runs/:runId/cancel`

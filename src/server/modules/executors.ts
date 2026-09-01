@@ -15,9 +15,9 @@ type WorkflowExecutor = (
 // implementations. A module can move into its own package without changing the
 // queue or orchestration layer.
 const executors: Record<string, WorkflowExecutor> = {
-  "transcription.default": async (job, _run, signal) => (await import("../processor.js")).processAudio(job, signal),
+  "transcription.default": async (job, run, signal) => (await import("../processor.js")).processAudio(job, signal, run),
   "ocr.images": async (job, run, signal) => (await import("../processor.js")).processImages(job, signal, run),
-  "ocr.pdf": async (job, _run, signal) => (await import("../processor.js")).processPdfs(job, signal),
+  "ocr.pdf": async (job, run, signal) => (await import("../processor.js")).processPdfs(job, signal, run),
   "text-transform.preset": async (job, run, signal) => {
     const slug = typeof run.params.slug === "string" ? run.params.slug : "";
     if (!slug) throw new Error("The text-transform run has no preset slug");
@@ -26,6 +26,7 @@ const executors: Record<string, WorkflowExecutor> = {
   "translation.default": async (job, run, signal) => (await import("./translation/executor.js")).processTranslation(job, run, signal),
   "grounding.image": async (job, run, signal) => (await import("./grounding/executor.js")).processGrounding(job, run, signal),
   "text-to-image.default": async (job, run, signal) => (await import("./text-to-image/executor.js")).processTextToImage(job, run, signal),
+  "llm.prompt": async (job, run, signal) => (await import("./llm-prompt/executor.js")).processLlmPrompt(job, run, signal),
 };
 
 export function registerWorkflowExecutor(workflowId: string, executor: WorkflowExecutor) {

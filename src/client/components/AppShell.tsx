@@ -1,14 +1,14 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { AudioLines, BrainCircuit, Image as ImageIcon, LayoutGrid, Languages, MessageCircle, PanelLeftClose, PanelLeftOpen, ScanSearch, ScanText, Search, Settings } from "lucide-react";
+import { AudioLines, BrainCircuit, GitBranch, Image as ImageIcon, LayoutGrid, Languages, MessageCircle, PanelLeftClose, PanelLeftOpen, ScanSearch, ScanText, Search, Settings } from "lucide-react";
 import { api } from "../api";
-import type { Health, ModuleDescriptor } from "../types";
+import type { Health, ModuleDescriptor, SparkStatus } from "../types";
 import { useGlobalSearch } from "./GlobalSearch";
 
 const moduleIcons = { "scan-text": ScanText, "audio-lines": AudioLines, languages: Languages, "scan-search": ScanSearch, image: ImageIcon, "message-circle": MessageCircle };
 const mobileNav = [
   { to: "/", label: "Home", icon: LayoutGrid, exact: true },
-  { to: "/tools", label: "Tools", icon: ScanSearch, exact: false },
+  { to: "/workflows", label: "Flows", icon: GitBranch, exact: false },
   { to: "/chat", label: "Chat", icon: MessageCircle, exact: false },
   { to: "/settings", label: "Settings", icon: Settings, exact: false },
 ] as const;
@@ -23,8 +23,13 @@ const services = [
 ];
 const sidebarPreferenceKey = "sparklingkit:sidebar-collapsed";
 
+function gibibytes(bytes: number) {
+  return `${(bytes / 2 ** 30).toFixed(1)} GiB`;
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const [health, setHealth] = useState<Health>();
+  const [sparkStatus, setSparkStatus] = useState<SparkStatus>();
   const [modules, setModules] = useState<ModuleDescriptor[]>([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try { return window.localStorage.getItem(sidebarPreferenceKey) === "true"; } catch { return false; }
@@ -39,11 +44,21 @@ export function AppShell({ children }: { children: ReactNode }) {
     const timer = window.setInterval(refresh, 30_000);
     return () => { active = false; window.clearInterval(timer); };
   }, []);
+  useEffect(() => {
+    let active = true;
+    const refresh = () => api.systemStatus().then((value) => active && setSparkStatus(value)).catch(() => active && setSparkStatus(undefined));
+    refresh();
+    const timer = window.setInterval(refresh, 10_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
   useEffect(() => { api.modules().then(setModules).catch(() => setModules([])); }, []);
   const enabled = health ? Object.values(health.endpoints).filter((item) => item.enabled) : [];
   const healthy = enabled.filter((item) => item.ok).length;
   const serviceSummary = health ? `${healthy}/${enabled.length} online` : "Checking";
   const activeChat = location.pathname.startsWith("/chat/");
+  const gpu = sparkStatus?.gpu.devices[0];
+  const memory = sparkStatus?.host.memory;
+  const onlineModels = sparkStatus?.services.filter((service) => service.ok).length || 0;
   const toggleSidebar = () => {
     const next = !sidebarCollapsed;
     setSidebarCollapsed(next);
@@ -64,6 +79,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <p className="nav-label">Workspace</p>
         <nav>
           <NavLink to="/" end title="Workbench" aria-label="Workbench" className={({ isActive }) => `nav-link ${isActive ? "nav-link-active" : ""}`}><LayoutGrid size={19} strokeWidth={1.8} /><span>Workbench</span></NavLink>
+          <NavLink to="/workflows" title="Workflows" aria-label="Workflows" className={({ isActive }) => `nav-link ${isActive ? "nav-link-active" : ""}`}><GitBranch size={19} strokeWidth={1.8} /><span>Workflows</span></NavLink>
           <p className="nav-label nav-label-tools">Tools</p>
           <div className="module-nav-list">{modules.map((module) => {
             const Icon = moduleIcons[module.icon];
@@ -72,6 +88,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           <NavLink to="/settings" state={{ backgroundLocation: location }} title="Settings" aria-label="Settings" className={({ isActive }) => `nav-link settings-nav-link ${isActive ? "nav-link-active" : ""}`}><Settings size={19} strokeWidth={1.8} /><span>Settings</span></NavLink>
         </nav>
         <div className="mt-auto">
+          <div className="spark-monitor">
+            <div className="spark-monitor-heading"><strong>DGX Spark</strong><span className={sparkStatus ? "online" : ""}><i />{sparkStatus ? "Live" : "Unavailable"}</span></div>
+            {memory ? <>
+              <div className="spark-monitor-metric"><span>VRAM</span><strong>{gibibytes(memory.usedBytes)} / {gibibytes(memory.totalBytes)}</strong></div>
+              <div className="spark-memory-track"><i style={{ width: `${Math.min(100, memory.usedPercent)}%` }} /></div>
+              <div className="spark-monitor-metric spark-monitor-cuda"><span>CUDA allocations</span><strong>{gibibytes(sparkStatus.gpu.allocatedProcessMemoryBytes)}</strong></div>
+              <div className="spark-monitor-foot"><span>GPU {gpu?.utilizationPercent ?? 0}%{gpu?.temperatureC != null ? ` · ${gpu.temperatureC}°C` : ""}</span><span>{onlineModels}/6 models</span></div>
+            </> : <small>Status reporter on port 8330</small>}
+          </div>
           <div className="service-monitor">
             <div className="status-card-heading">
               <strong>AI services</strong>

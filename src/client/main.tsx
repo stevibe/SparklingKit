@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/manrope";
+import "@xyflow/react/dist/style.css";
 import "./styles.css";
 
 createRoot(document.getElementById("root")!).render(
