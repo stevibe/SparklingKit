@@ -19,7 +19,7 @@ function encodedPath(value: string) {
 
 export const api = {
   health: () => request<Health>("/api/health"),
-  systemStatus: () => request<SparkStatus>("/api/system/status"),
+  systemStatus: () => request<SparkStatus | undefined>("/api/system/status"),
   testEndpoint: (kind: EndpointKind, endpoint: EndpointConfig) =>
     request<EndpointHealth>(`/api/health/${kind}`, { method: "POST", body: JSON.stringify({ endpoint }) }),
   settings: () => request<Settings>("/api/settings"),

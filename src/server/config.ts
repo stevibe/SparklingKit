@@ -6,45 +6,57 @@ export const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(ROOT_DIR,
 export const CLIENT_DIR = path.resolve(ROOT_DIR, "dist-client");
 export const PORT = Number(process.env.PORT || 8787);
 export const REDIS_URL = process.env.REDIS_URL || "redis://127.0.0.1:6379";
-export const SYSTEM_STATUS_BASE_URL = process.env.SYSTEM_STATUS_BASE_URL || "http://192.0.2.10:8330";
+
+export const BUNDLED_SERVICE_CATALOG = {
+  systemStatus: { port: 8330, baseUrl: "http://192.0.2.10:8330" },
+  llm: { port: 8331, baseUrl: "http://192.0.2.10:8331/v1", model: "qwen36-35b-a3b-nvfp4" },
+  ocr: { port: 8332, baseUrl: "http://192.0.2.10:8332/v1", model: "Unlimited-OCR" },
+  stt: { port: 8333, baseUrl: "http://192.0.2.10:8333/v1", model: "Qwen3-ASR-1.7B" },
+  translation: { port: 8334, baseUrl: "http://192.0.2.10:8334/v1", model: "Hy-MT2-1.8B-FP8" },
+  grounding: { port: 8335, baseUrl: "http://192.0.2.10:8335/v1", model: "nvidia/LocateAnything-3B" },
+  imageGeneration: { port: 8336, baseUrl: "http://192.0.2.10:8336/v1", model: "Z-Image-Turbo" },
+} as const;
 
 export const defaultSettings: Settings = {
   schemaVersion: 2,
+  systemStatus: {
+    baseUrl: process.env.SYSTEM_STATUS_BASE_URL || BUNDLED_SERVICE_CATALOG.systemStatus.baseUrl,
+  },
   endpoints: {
     llm: {
-      baseUrl: process.env.LLM_BASE_URL || "http://192.0.2.10:8331/v1",
-      model: process.env.LLM_MODEL || "qwen36-35b-a3b-nvfp4",
+      baseUrl: process.env.LLM_BASE_URL || BUNDLED_SERVICE_CATALOG.llm.baseUrl,
+      model: process.env.LLM_MODEL || BUNDLED_SERVICE_CATALOG.llm.model,
       apiKey: process.env.LLM_API_KEY || "",
       enabled: true,
       capabilities: ["text", "image"],
     },
     ocr: {
-      baseUrl: process.env.OCR_BASE_URL || "http://192.0.2.10:8332/v1",
-      model: process.env.OCR_MODEL || "Unlimited-OCR",
+      baseUrl: process.env.OCR_BASE_URL || BUNDLED_SERVICE_CATALOG.ocr.baseUrl,
+      model: process.env.OCR_MODEL || BUNDLED_SERVICE_CATALOG.ocr.model,
       apiKey: process.env.OCR_API_KEY || "",
       enabled: true,
     },
     stt: {
-      baseUrl: process.env.STT_BASE_URL || "http://192.0.2.10:8333/v1",
-      model: process.env.STT_MODEL || "Qwen3-ASR-1.7B",
+      baseUrl: process.env.STT_BASE_URL || BUNDLED_SERVICE_CATALOG.stt.baseUrl,
+      model: process.env.STT_MODEL || BUNDLED_SERVICE_CATALOG.stt.model,
       apiKey: process.env.STT_API_KEY || "",
       enabled: true,
     },
     translation: {
-      baseUrl: process.env.TRANSLATION_BASE_URL || "http://192.0.2.10:8334/v1",
-      model: process.env.TRANSLATION_MODEL || "Hy-MT2-1.8B-FP8",
+      baseUrl: process.env.TRANSLATION_BASE_URL || BUNDLED_SERVICE_CATALOG.translation.baseUrl,
+      model: process.env.TRANSLATION_MODEL || BUNDLED_SERVICE_CATALOG.translation.model,
       apiKey: process.env.TRANSLATION_API_KEY || "",
       enabled: true,
     },
     grounding: {
-      baseUrl: process.env.GROUNDING_BASE_URL || "http://192.0.2.10:8335/v1",
-      model: process.env.GROUNDING_MODEL || "nvidia/LocateAnything-3B",
+      baseUrl: process.env.GROUNDING_BASE_URL || BUNDLED_SERVICE_CATALOG.grounding.baseUrl,
+      model: process.env.GROUNDING_MODEL || BUNDLED_SERVICE_CATALOG.grounding.model,
       apiKey: process.env.GROUNDING_API_KEY || "",
       enabled: true,
     },
     "image-generation": {
-      baseUrl: process.env.IMAGE_GENERATION_BASE_URL || "http://192.0.2.10:8336/v1",
-      model: process.env.IMAGE_GENERATION_MODEL || "Z-Image-Turbo",
+      baseUrl: process.env.IMAGE_GENERATION_BASE_URL || BUNDLED_SERVICE_CATALOG.imageGeneration.baseUrl,
+      model: process.env.IMAGE_GENERATION_MODEL || BUNDLED_SERVICE_CATALOG.imageGeneration.model,
       apiKey: process.env.IMAGE_GENERATION_API_KEY || "",
       enabled: true,
     },

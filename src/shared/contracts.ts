@@ -114,6 +114,7 @@ export interface EndpointConfig {
 
 export interface Settings {
   schemaVersion: 2;
+  systemStatus: { baseUrl: string };
   endpoints: Record<EndpointKind, EndpointConfig>;
   audio: {
     chunkTargetSec: number;
@@ -232,7 +233,7 @@ export interface SearchResponse {
   total: number;
 }
 
-export const WORKFLOW_NODE_TYPES = ["input", "module", "select", "if", "switch", "merge", "end", "fail"] as const;
+export const WORKFLOW_NODE_TYPES = ["input", "module", "select", "if", "switch", "merge", "save", "end", "fail"] as const;
 export type WorkflowNodeType = (typeof WORKFLOW_NODE_TYPES)[number];
 export const WORKFLOW_SERVICE_IDS = ["ocr", "transcription", "translation", "grounding", "text-to-image", "llm-prompt", "chat"] as const;
 export type WorkflowServiceId = (typeof WORKFLOW_SERVICE_IDS)[number];

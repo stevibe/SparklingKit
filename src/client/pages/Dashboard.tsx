@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useDropzone } from "react-dropzone";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeftRight, ArrowRight, AudioLines, CloudUpload, FileText, FolderOpen, Image as ImageIcon, Languages, MessageCircle, Save, ScanSearch, ScanText, Search, Trash2, X } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, AudioLines, CloudUpload, FileText, FolderOpen, GitBranch, Image as ImageIcon, Languages, MessageCircle, Play, Save, ScanSearch, ScanText, Search, Trash2, X } from "lucide-react";
 import { api, uploadJob, uploadTranslationJob } from "../api";
 import { cn, ConfirmDialog, formatBytes, JobIcon, Progress, StatusBadge, timeAgo } from "../components/ui";
 import { savedTranslationPreferences, translationLanguages, translationPreferenceKey, type TranslationPreferences } from "../translation";
-import type { Job, JobKind, ModuleDescriptor, ModuleId } from "../types";
+import type { Job, JobKind, ModuleDescriptor, ModuleId, WorkflowDefinition } from "../types";
 import { useGlobalSearch } from "../components/GlobalSearch";
 import { SearchSelect } from "../components/SearchSelect";
+import { useToast } from "../components/ToastProvider";
+import { RunWorkflowDialog, workflowInputSummary } from "../components/RunWorkflowDialog";
 
 const workflowCopy: Record<JobKind, { label: string; description: string }> = {
   audio: { label: "Transcription", description: "Audio or video to transcript and subtitles" },
@@ -87,6 +89,8 @@ async function completedTranslation(jobId: string) {
 export function Dashboard() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [modules, setModules] = useState<ModuleDescriptor[]>([]);
+  const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
+  const [runWorkflow, setRunWorkflow] = useState<WorkflowDefinition>();
   const [files, setFiles] = useState<File[]>([]);
   const [fileAction, setFileAction] = useState<FileAction>("ocr");
   const [filter, setFilter] = useState<JobFilter>("all");
@@ -113,6 +117,7 @@ export function Dashboard() {
   const translationPreviewController = useRef<AbortController | undefined>(undefined);
   const navigate = useNavigate();
   const { openSearch } = useGlobalSearch();
+  const toast = useToast();
 
   useEffect(() => {
     let active = true;
@@ -122,6 +127,7 @@ export function Dashboard() {
     return () => { active = false; window.clearInterval(timer); };
   }, []);
   useEffect(() => { api.modules().then(setModules).catch(() => undefined); }, []);
+  useEffect(() => { api.workflows().then(setWorkflows).catch(() => undefined); }, []);
   useEffect(() => { localStorage.setItem(translationPreferenceKey, JSON.stringify(translationPreferences)); }, [translationPreferences]);
 
   const configured = useCallback((moduleId: ModuleId) => Boolean(modules.find((module) => module.id === moduleId)?.configured), [modules]);
@@ -175,6 +181,7 @@ export function Dashboard() {
   });
 
   const visibleJobs = jobs.filter((job) => filter === "all" || job.moduleId === ({ audio: "transcription", ocr: "ocr", translation: "translation", grounding: "grounding", generated: "text-to-image" } as const)[filter]);
+  const enabledWorkflows = workflows.filter((workflow) => workflow.enabled);
 
   async function submitFile() {
     if (!files.length || !availableFileActions.includes(fileAction)) return;
@@ -205,6 +212,7 @@ export function Dashboard() {
       const completed = await completedTranslation(created.id);
       setTranslatedText(completed.text);
       setJobs((current) => [completed.job, ...current.filter((job) => job.id !== completed.job.id)]);
+      toast.success("Translation saved", "Added to Recent work.");
     } catch (error) {
       setTranslationError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -261,6 +269,7 @@ export function Dashboard() {
     try {
       await api.deleteJob(deleteTarget.id);
       setJobs((items) => items.filter((job) => job.id !== deleteTarget.id));
+      toast.success("Job deleted", deleteTarget.title);
       setDeleteTarget(undefined);
     } catch (error) {
       setDeleteError(error instanceof Error ? error.message : String(error));
@@ -301,6 +310,15 @@ export function Dashboard() {
         <div className="workbench-card-footer workbench-translation-footer"><button className="button-primary" onClick={() => void saveTranslation()} disabled={savingTranslation || translating || translationPending || !translatedText || !translationReady}>{savingTranslation ? <><span className="spinner dark" />Saving</> : <><Save size={15} />Save</>}</button></div>
       </section>
 
+      {enabledWorkflows.length > 0 && <section className="workbench-card workbench-workflows-card">
+        <WorkbenchHeading icon={<GitBranch size={22} />} title="Workflows" />
+        <div className="workbench-workflow-list">{enabledWorkflows.map((workflow) => <button type="button" onClick={() => setRunWorkflow(workflow)} aria-label={`Run workflow ${workflow.name}`} key={workflow.id}>
+          <span className="workbench-workflow-icon"><GitBranch size={18} /></span>
+          <span><strong>{workflow.name}</strong><small>{workflow.description || `Accepts ${workflowInputSummary(workflow)}`}</small></span>
+          <span className="workbench-workflow-run"><Play size={15} fill="currentColor" />Run</span>
+        </button>)}</div>
+      </section>}
+
       <section className="workbench-card workbench-image-card">
         <WorkbenchHeading icon={<ImageIcon size={22} />} title="Create an image" />
         <textarea className="workbench-prompt" value={imagePrompt} onChange={(event) => setImagePrompt(event.target.value)} placeholder="A quiet reading room at night, warm table lamps, rain on tall windows…" maxLength={12000} />
@@ -331,6 +349,7 @@ export function Dashboard() {
     </section>
     </div>
     <ConfirmDialog open={Boolean(deleteTarget)} title="Delete job?" description={<>“{deleteTarget?.title}” and all of its source files, generated outputs, and processing data will be permanently deleted.{deleteTarget && ["queued", "preparing", "processing", "merging"].includes(deleteTarget.status) && <> Its current processing will also be stopped.</>}</>} busy={deleting} error={deleteError} onCancel={() => !deleting && setDeleteTarget(undefined)} onConfirm={confirmDelete} />
+    {runWorkflow && <RunWorkflowDialog definition={runWorkflow} onClose={() => setRunWorkflow(undefined)} />}
   </div>;
 }
 
@@ -346,5 +365,5 @@ function CompactLanguageSelect({ label, value, allowAuto = false, onChange }: { 
 function JobRow({ job, onDelete, compact = false }: { job: Job; onDelete: () => void; compact?: boolean }) {
   const running = ["queued", "preparing", "processing", "merging"].includes(job.status);
   const label = job.moduleId === "grounding" ? "Grounding" : job.moduleId === "translation" ? "Translation" : workflowCopy[job.type].label;
-  return <div className={cn("job-row-shell", compact && "compact")}><Link to={`/jobs/${job.id}`} className="job-row group"><JobIcon type={job.type} /><div className="job-row-main"><div><p>{job.title}</p><StatusBadge status={job.status} /></div><small>{label}<i />{!compact && <>{job.stage}<i /></>}{timeAgo(job.createdAt)}</small>{running && <Progress job={job} />}</div><ArrowRight size={19} className="job-row-arrow" /></Link><button className="row-delete-button" onClick={onDelete} aria-label={`Delete ${job.title}`} title="Delete job"><Trash2 size={15} /></button></div>;
+  return <div className={cn("job-row-shell", compact && "compact")}><Link to={`/jobs/${job.id}`} className="job-row group"><JobIcon type={job.type} /><div className="job-row-main"><div><p>{job.title}</p>{(!compact || job.status !== "done") && <StatusBadge status={job.status} />}</div><small>{label}<i />{!compact && <>{job.stage}<i /></>}{timeAgo(job.createdAt)}</small>{running && <Progress job={job} />}</div><ArrowRight size={19} className="job-row-arrow" /></Link><button className="row-delete-button" onClick={onDelete} aria-label={`Delete ${job.title}`} title="Delete job"><Trash2 size={15} /></button></div>;
 }

@@ -93,6 +93,7 @@ export async function readSettings(): Promise<Settings> {
     ...structuredClone(defaultSettings),
     ...saved,
     schemaVersion: 2,
+    systemStatus: { ...defaultSettings.systemStatus, ...saved.systemStatus },
     endpoints,
     audio: { ...defaultSettings.audio, ...saved.audio },
     pdf: { ...defaultSettings.pdf, ...saved.pdf },

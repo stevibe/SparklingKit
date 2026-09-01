@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Background, Controls, Handle, MarkerType, Position, ReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
-import { ArrowLeft, ArrowRight, AudioLines, Bot, Braces, Check, ChevronDown, CircleStop, Code2, Combine, Copy, Download, ExternalLink, File, FileAudio, FileInput, FileJson, FileText, FileVideo, FolderOpen, GitBranch, Image as ImageIcon, Languages, LoaderCircle, MessageCircle, PanelLeft, Pencil, ScanSearch, ScanText, Split, Square, Subtitles, Trash2, TriangleAlert } from "lucide-react";
-import { api } from "../api";
+import { ArrowLeft, ArrowRight, AudioLines, Bot, Braces, Check, ChevronDown, CircleStop, Code2, Combine, Copy, Download, ExternalLink, File, FileAudio, FileInput, FileJson, FileText, FileVideo, FolderOpen, GitBranch, Image as ImageIcon, Languages, LoaderCircle, MessageCircle, PanelLeft, Pencil, Save, ScanSearch, ScanText, Split, Square, Subtitles, Trash2, TriangleAlert } from "lucide-react";
+import { api, startWorkflow } from "../api";
 import { writeClipboardText } from "../clipboard";
 import { ConfirmDialog, JobIcon, Progress, RenameDialog, StatusBadge, cn, formatBytes, timeAgo } from "../components/ui";
 import { SearchSelect } from "../components/SearchSelect";
 import { MarkdownRenderer } from "../components/MarkdownRenderer";
+import { useToast } from "../components/ToastProvider";
 import { compatibleModuleContracts, moduleHandoffUrl } from "../../shared/module-router";
-import { nodeTitle } from "../../shared/workflows";
+import { nodeTitle, workflowAcceptsArtifact } from "../../shared/workflows";
 import type { FlowNodeRun, FlowRun, WorkflowNode, WorkflowServiceId } from "../../shared/contracts";
-import type { Chat, Job, ModuleDescriptor, ModuleId, PromptPreset } from "../types";
+import type { Chat, Job, ModuleDescriptor, ModuleId, PromptPreset, WorkflowDefinition } from "../types";
 
 type PreviewMode = "rendered" | "source";
 type DeleteTarget =
@@ -27,6 +28,7 @@ export function JobPage() {
   const [job, setJob] = useState<Job>();
   const [prompts, setPrompts] = useState<PromptPreset[]>([]);
   const [modules, setModules] = useState<ModuleDescriptor[]>([]);
+  const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
   const [preview, setPreview] = useState("");
   const [selectedFile, setSelectedFile] = useState("");
   const [selectedScope, setSelectedScope] = useState<"output" | "input">("output");
@@ -44,11 +46,14 @@ export function JobPage() {
   const [renameError, setRenameError] = useState("");
   const [stopping, setStopping] = useState(false);
   const [openingChat, setOpeningChat] = useState(false);
+  const [startingWorkflowId, setStartingWorkflowId] = useState("");
   const [linkedChats, setLinkedChats] = useState<Chat[]>([]);
   const [flowRun, setFlowRun] = useState<FlowRun>();
   const navigate = useNavigate();
+  const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedArtifactId = searchParams.get("artifact") || "";
+  const workflowViewSelected = searchParams.get("view") === "workflow" && !requestedArtifactId;
 
   useEffect(() => {
     setLinkedChats([]);
@@ -56,6 +61,7 @@ export function JobPage() {
     api.job(id).then(setJob).catch((value) => setError(value.message));
     api.prompts().then(setPrompts).catch(() => undefined);
     api.modules().then(setModules).catch(() => undefined);
+    api.workflows().then(setWorkflows).catch(() => undefined);
     api.chats().then((chats) => setLinkedChats(linkedChatsForJob(chats, id))).catch(() => undefined);
     const events = new EventSource(`/api/jobs/${id}/events`);
     events.onmessage = (event) => setJob(JSON.parse(event.data) as Job);
@@ -122,7 +128,8 @@ export function JobPage() {
   if (!job) return <div className="page-wrap job-page"><div className="skeleton h-[70vh]" /></div>;
   const running = ["queued", "preparing", "processing", "merging"].includes(job.status);
   const complete = ["done", "done_with_warnings"].includes(job.status);
-  const showWorkflowRun = Boolean(flowRun && (running || !outputFiles.length || ["failed", "blocked", "cancelled"].includes(flowRun.status)));
+  const forceWorkflowRun = Boolean(flowRun && (running || !outputFiles.length || ["failed", "blocked", "cancelled"].includes(flowRun.status)));
+  const showWorkflowRun = Boolean(flowRun && (forceWorkflowRun || workflowViewSelected));
   const selectedKind = getFileKind(selectedFile);
   const selectedInput = selectedScope === "input" ? job.inputs.find((input) => input.storedName === selectedFile) : undefined;
   const selectedArtifact = selectedScope === "output"
@@ -133,7 +140,8 @@ export function JobPage() {
   const nextActions = selectedArtifact
     ? compatibleModuleContracts(selectedArtifact.kind, sourceModuleId).filter((contract) => contract.id !== "chat")
     : [];
-  const workflowLabel = modules.find((module) => module.id === job.moduleId)?.title || (job.type === "audio" ? "Transcription" : "OCR");
+  const compatibleWorkflows = selectedArtifact ? workflows.filter((workflow) => workflow.enabled && workflowAcceptsArtifact(workflow, selectedArtifact.kind)) : [];
+  const workflowLabel = flowRun?.definition.name || modules.find((module) => module.id === job.moduleId)?.title || (job.type === "audio" ? "Transcription" : "OCR");
   const html = extractHtml(preview, selectedFile);
   const canRender = selectedKind === "markdown" || Boolean(html);
   const canCopy = ["markdown", "json", "subtitle", "html", "text"].includes(selectedKind);
@@ -153,6 +161,21 @@ export function JobPage() {
   }
   async function runPreset(slug: string) {
     if (slug) setJob(await api.runPreset(job!.id, slug));
+  }
+  async function runCompatibleWorkflow(definition: WorkflowDefinition) {
+    if (!selectedArtifact || startingWorkflowId) return;
+    setStartingWorkflowId(definition.id);
+    setError("");
+    try {
+      const result = await startWorkflow(definition.id, { jobId: job!.id, inputArtifactIds: [selectedArtifact.id] }, () => undefined);
+      setJob(result.job);
+      setFlowRun(result.flow);
+      toast.success("Workflow started", definition.name);
+    } catch (workflowError) {
+      setError(workflowError instanceof Error ? workflowError.message : String(workflowError));
+    } finally {
+      setStartingWorkflowId("");
+    }
   }
   async function stopJob() {
     setStopping(true);
@@ -182,11 +205,18 @@ export function JobPage() {
   function selectWorkspaceFile(scope: "output" | "input", file: string) {
     setSelectedScope(scope);
     setSelectedFile(file);
-    if (requestedArtifactId) {
+    if (requestedArtifactId || workflowViewSelected) {
       const next = new URLSearchParams(searchParams);
       next.delete("artifact");
+      next.delete("view");
       setSearchParams(next, { replace: true });
     }
+  }
+  function selectWorkflowRun() {
+    const next = new URLSearchParams(searchParams);
+    next.delete("artifact");
+    next.set("view", "workflow");
+    setSearchParams(next, { replace: true });
   }
   function askToRename(target: RenameTarget) {
     setRenameError("");
@@ -208,6 +238,7 @@ export function JobPage() {
         setJob(await api.renameInputFile(job!.id, renameTarget.file, renameValue));
       }
       setRenameTarget(undefined);
+      toast.success(renameTarget.kind === "job" ? "Job renamed" : renameTarget.kind === "input" ? "Source file renamed" : "Generated file renamed", renameValue.trim());
     } catch (renameFailure) {
       setRenameError(renameFailure instanceof Error ? renameFailure.message : String(renameFailure));
     } finally {
@@ -221,6 +252,7 @@ export function JobPage() {
     try {
       if (deleteTarget.kind === "job") {
         await api.deleteJob(job!.id);
+        toast.success("Job deleted", deleteTarget.label);
         navigate("/", { replace: true });
         return;
       }
@@ -233,6 +265,7 @@ export function JobPage() {
         if (selectedScope === "input" && selectedFile === deleteTarget.file) { setSelectedFile(""); setPreview(""); }
         setJob(next);
       }
+      toast.success(deleteTarget.kind === "input" ? "Source file deleted" : "Generated file deleted", deleteTarget.label);
       setDeleteTarget(undefined);
     } catch (deleteFailure) {
       setDeleteError(deleteFailure instanceof Error ? deleteFailure.message : String(deleteFailure));
@@ -247,7 +280,7 @@ export function JobPage() {
     : <>“{deleteTarget?.label}” will be permanently deleted from this job.</>;
   const renameDialogTitle = renameTarget?.kind === "job" ? "Rename job" : renameTarget?.kind === "input" ? "Rename source file" : "Rename output file";
   const renamedExtension = renameTarget && renameTarget.kind !== "job" ? renameTarget.value.match(/\.[^.]+$/)?.[0] : undefined;
-  const sourceFileRows = job.inputs.map((input) => <div className="source-file-row" key={input.storedName}><button className={cn("source-file", selectedScope === "input" && selectedFile === input.storedName && "active")} onClick={() => selectWorkspaceFile("input", input.storedName)}><FileTypeIcon file={input.name} /><span><strong>{input.name}</strong><small>{formatBytes(input.size)} · Source</small></span></button><span className="file-row-actions"><button className="row-rename-button" onClick={() => askToRename({ kind: "input", file: input.storedName, value: input.name })} disabled={running} aria-label={"Rename " + input.name} title={running ? "Files cannot be renamed while processing" : "Rename source file"}><Pencil size={13} /></button><button className="row-delete-button" onClick={() => askToDelete({ kind: "input", file: input.storedName, label: input.name })} disabled={running} aria-label={"Delete " + input.name} title={running ? "Files cannot be deleted while processing" : "Delete source file"}><Trash2 size={14} /></button></span></div>);
+  const sourceFileRows = job.inputs.map((input) => <div className="source-file-row" key={input.storedName}><button className={cn("source-file", !workflowViewSelected && selectedScope === "input" && selectedFile === input.storedName && "active")} onClick={() => selectWorkspaceFile("input", input.storedName)}><FileTypeIcon file={input.name} /><span><strong>{input.name}</strong><small>{formatBytes(input.size)} · Source</small></span></button><span className="file-row-actions"><button className="row-rename-button" onClick={() => askToRename({ kind: "input", file: input.storedName, value: input.name })} disabled={running} aria-label={"Rename " + input.name} title={running ? "Files cannot be renamed while processing" : "Rename source file"}><Pencil size={13} /></button><button className="row-delete-button" onClick={() => askToDelete({ kind: "input", file: input.storedName, label: input.name })} disabled={running} aria-label={"Delete " + input.name} title={running ? "Files cannot be deleted while processing" : "Delete source file"}><Trash2 size={14} /></button></span></div>);
 
   return <div className="job-page">
     <header className="job-titlebar">
@@ -259,14 +292,15 @@ export function JobPage() {
     {job.error && <div className="error-card job-alert"><TriangleAlert size={19} /><div><strong>Processing failed</strong><p>{job.error}</p></div></div>}
     {!!job.warnings.length && <div className="warning-card job-alert"><TriangleAlert size={19} /><div><strong>Completed with warnings</strong>{job.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div></div>}
 
-    <section className={cn("file-workspace", showWorkflowRun && "workflow-run-workspace")}>
+    <section className={cn("file-workspace", forceWorkflowRun && "workflow-run-workspace")}>
       <aside className="file-sidebar">
         <div className="file-sidebar-title"><span><PanelLeft size={18} />Files</span><small>{outputFiles.length + job.inputs.length}</small></div>
         <div className="file-tree">
           <p className="file-group-label">Generated output</p>
-          <div className="output-files-list">{outputFiles.map((file) => <div className={cn("file-tree-row", file.includes("/") && "nested")} key={file}><button className={cn("file-tree-item", selectedScope === "output" && selectedFile === file && "active")} onClick={() => selectWorkspaceFile("output", file)}><FileTypeIcon file={file} /><span><strong>{displayOutputName(file)}</strong><small>{describeOutput(file)}</small></span></button><button className="row-delete-button" onClick={() => askToDelete({ kind: "output", file, label: displayOutputName(file) })} disabled={running} aria-label={"Delete " + displayOutputName(file)} title={running ? "Files cannot be deleted while processing" : "Delete output file"}><Trash2 size={14} /></button></div>)}</div>
+          <div className="output-files-list">{outputFiles.map((file) => <div className={cn("file-tree-row", file.includes("/") && "nested")} key={file}><button className={cn("file-tree-item", !workflowViewSelected && selectedScope === "output" && selectedFile === file && "active")} onClick={() => selectWorkspaceFile("output", file)}><FileTypeIcon file={file} /><span><strong>{displayOutputName(file)}</strong><small>{describeOutput(file)}</small></span></button><button className="row-delete-button" onClick={() => askToDelete({ kind: "output", file, label: displayOutputName(file) })} disabled={running} aria-label={"Delete " + displayOutputName(file)} title={running ? "Files cannot be deleted while processing" : "Delete output file"}><Trash2 size={14} /></button></div>)}</div>
           {!outputFiles.length && <div className="file-tree-empty"><FolderOpen size={22} /><span>Outputs will appear here</span></div>}
           {!!linkedChats.length && <div className="job-chat-section"><div className="file-tree-divider" /><p className="file-group-label">Chat</p>{linkedChats.map((linkedChat) => <Link className="job-chat-link" to={`/chat/${encodeURIComponent(linkedChat.id)}`} key={linkedChat.id}><span className="job-chat-icon"><MessageCircle size={17} /></span><span><strong>{linkedChat.title}</strong><small>Conversation · {timeAgo(linkedChat.updatedAt)}</small></span><ArrowRight size={15} /></Link>)}</div>}
+          {flowRun && <WorkflowRunRecord flowRun={flowRun} active={workflowViewSelected} onSelect={selectWorkflowRun} />}
           <div className="source-files-desktop"><div className="file-tree-divider" /><p className="file-group-label">Source files</p>{sourceFileRows}</div>
           <details className="mobile-source-files"><summary><span><File size={16} />Source files</span><small>{job.inputs.length}</small><ChevronDown size={16} /></summary><div>{sourceFileRows}</div></details>
         </div>
@@ -275,11 +309,13 @@ export function JobPage() {
 
       <div className="preview-pane">
         {showWorkflowRun ? <ProcessingView job={job} flowRun={flowRun} /> : running ? <ProcessingView job={job} /> : selectedFile ? <>
-          <div className="preview-toolbar">
-            <div className="preview-file-name"><FileTypeIcon file={selectedInput?.name || selectedFile} /><span><strong>{selectedDisplayName}</strong><small>{selectedScope === "input" ? "Source file" : selectedFile.split("/").at(-1)} · {formatLabel(selectedKind, Boolean(html))}</small></span></div>
-            <div className="preview-tools">{canRender && <div className="view-switch"><button className={previewMode === "rendered" ? "active" : ""} onClick={() => setPreviewMode("rendered")}>Preview</button><button className={previewMode === "source" ? "active" : ""} onClick={() => setPreviewMode("source")}>Source</button></div>}<span className="preview-action-buttons"><button className="icon-button rename-file-button" onClick={() => askToRename(selectedScope === "input" ? { kind: "input", file: selectedFile, value: selectedInput?.name || selectedFile } : { kind: "output", file: selectedFile, value: selectedFile.split("/").at(-1) || selectedFile })} disabled={running} aria-label="Rename file" title={running ? "Files cannot be renamed while processing" : "Rename file"}><Pencil size={16} /></button>{canCopy && <button className={cn("icon-button copy-file-button", copiedFile === selectedFile && "copied")} onClick={copyPreview} disabled={loadingPreview} aria-label={copiedFile === selectedFile ? "Copied file contents" : "Copy file contents"} title={copiedFile === selectedFile ? "Copied" : "Copy file contents"}>{copiedFile === selectedFile ? <Check size={17} /> : <Copy size={17} />}</button>}<button className="icon-button destructive-icon-button" onClick={() => askToDelete({ kind: selectedScope, file: selectedFile, label: selectedDisplayName })} disabled={running} aria-label="Delete file" title={running ? "Files cannot be deleted while processing" : "Delete file"}><Trash2 size={17} /></button><a className="icon-button open-file-button" href={selectedUrl} target="_blank" rel="noreferrer" aria-label="Open file"><ExternalLink size={17} /></a><a className="button-primary compact" href={selectedUrl} download><Download size={16} /><span>Download</span></a></span></div>
+          <div className="preview-sticky-stack">
+            <div className="preview-toolbar">
+              <div className="preview-file-name"><FileTypeIcon file={selectedInput?.name || selectedFile} /><span><strong>{selectedDisplayName}</strong><small>{selectedScope === "input" ? "Source file" : selectedFile.split("/").at(-1)} · {formatLabel(selectedKind, Boolean(html))}</small></span></div>
+              <div className="preview-tools">{canRender && <div className="view-switch"><button className={previewMode === "rendered" ? "active" : ""} onClick={() => setPreviewMode("rendered")}>Preview</button><button className={previewMode === "source" ? "active" : ""} onClick={() => setPreviewMode("source")}>Source</button></div>}<span className="preview-action-buttons"><button className="icon-button rename-file-button" onClick={() => askToRename(selectedScope === "input" ? { kind: "input", file: selectedFile, value: selectedInput?.name || selectedFile } : { kind: "output", file: selectedFile, value: selectedFile.split("/").at(-1) || selectedFile })} disabled={running} aria-label="Rename file" title={running ? "Files cannot be renamed while processing" : "Rename file"}><Pencil size={16} /></button>{canCopy && <button className={cn("icon-button copy-file-button", copiedFile === selectedFile && "copied")} onClick={copyPreview} disabled={loadingPreview} aria-label={copiedFile === selectedFile ? "Copied file contents" : "Copy file contents"} title={copiedFile === selectedFile ? "Copied" : "Copy file contents"}>{copiedFile === selectedFile ? <Check size={17} /> : <Copy size={17} />}</button>}<button className="icon-button destructive-icon-button" onClick={() => askToDelete({ kind: selectedScope, file: selectedFile, label: selectedDisplayName })} disabled={running} aria-label="Delete file" title={running ? "Files cannot be deleted while processing" : "Delete file"}><Trash2 size={17} /></button><a className="icon-button open-file-button" href={selectedUrl} target="_blank" rel="noreferrer" aria-label="Open file"><ExternalLink size={17} /></a><a className="button-primary compact" href={selectedUrl} download><Download size={16} /><span>Download</span></a></span></div>
+            </div>
+            {selectedArtifact && (nextActions.length > 0 || compatibleWorkflows.length > 0) && <div className="artifact-flow-bar"><span>Continue with</span><div>{nextActions.map((action) => <Link className="artifact-flow-action" to={moduleHandoffUrl(action.id, job.id, selectedArtifact.id)} title={action.actionDescription} key={action.id}><FlowActionIcon moduleId={action.id} /><span>{action.actionLabel}</span><ArrowRight size={15} /></Link>)}{compatibleWorkflows.map((workflow) => <button type="button" className="artifact-flow-action workflow-flow-action" onClick={() => void runCompatibleWorkflow(workflow)} disabled={Boolean(startingWorkflowId)} title={workflow.description || `Run ${workflow.name}`} key={`workflow-${workflow.id}`}><GitBranch size={17} /><span>{workflow.name}</span>{startingWorkflowId === workflow.id ? <LoaderCircle size={15} className="animate-spin" /> : <ArrowRight size={15} />}</button>)}</div></div>}
           </div>
-          {selectedArtifact && nextActions.length > 0 && <div className="artifact-flow-bar"><span>Continue with</span><div>{nextActions.map((action) => <Link className="artifact-flow-action" to={moduleHandoffUrl(action.id, job.id, selectedArtifact.id)} title={action.actionDescription} key={action.id}><FlowActionIcon moduleId={action.id} /><span>{action.actionLabel}</span><ArrowRight size={15} /></Link>)}</div></div>}
           {selectedScope === "output" && job.type === "audio" && job.inputs[0] && selectedFile === outputFiles[0] && <div className="workspace-player">{job.inputs[0].mimeType.startsWith("video/") ? <video controls preload="metadata" src={`/api/jobs/${job.id}/input/${encodeURIComponent(job.inputs[0].storedName)}`} /> : <audio controls preload="metadata" src={`/api/jobs/${job.id}/input/${encodeURIComponent(job.inputs[0].storedName)}`} />}</div>}
           <div className="preview-content">{loadingPreview ? <div className="preview-loading"><span className="spinner dark" />Loading preview…</div> : <OutputPreview content={preview} kind={selectedKind} html={html} mode={previewMode} title={selectedDisplayName} src={selectedUrl} />}</div>
         </> : <div className="workspace-empty"><FolderOpen size={36} /><h2>No output yet</h2><p>This job did not create any files.</p></div>}
@@ -311,24 +347,61 @@ const workflowServiceIcons: Record<WorkflowServiceId, typeof ScanText> = {
   chat: MessageCircle,
 };
 
-function WorkflowStatusNode({ data }: NodeProps<WorkflowStatusCanvasNode>) {
-  const { node, run } = data;
-  const status = run?.status || "pending";
+function workflowNodeIcon(node: WorkflowNode) {
   const serviceId = node.type === "module" ? node.config.moduleId as WorkflowServiceId : undefined;
-  const Icon = serviceId ? workflowServiceIcons[serviceId] || Braces
+  return serviceId ? workflowServiceIcons[serviceId] || Braces
     : node.type === "input" ? FileInput
       : node.type === "select" ? Check
         : node.type === "if" ? GitBranch
           : node.type === "switch" ? Split
-            : node.type === "merge" ? Combine
+              : node.type === "merge" ? Combine
+                : node.type === "save" ? Save
               : node.type === "end" ? CircleStop
                 : node.type === "fail" ? TriangleAlert : Braces;
+}
+
+function WorkflowNodeStateIcon({ status, size = 17 }: { status: FlowNodeRun["status"]; size?: number }) {
+  return status === "running" ? <LoaderCircle size={size} className="animate-spin" />
+    : status === "succeeded" ? <Check size={size} />
+      : status === "failed" || status === "blocked" ? <TriangleAlert size={size - 1} />
+        : status === "cancelled" ? <Square size={size - 4} /> : <i />;
+}
+
+export function flowNodeHistoryLabel(run?: FlowNodeRun, now = Date.now()) {
+  if (!run) return "Pending";
+  const label = run.status === "succeeded" ? "Completed" : run.status === "running" ? "Running" : run.status === "ready" ? "Ready" : run.status === "skipped" ? "Skipped" : run.status.charAt(0).toUpperCase() + run.status.slice(1);
+  if (!run.startedAt) return label;
+  const start = Date.parse(run.startedAt);
+  const end = run.completedAt ? Date.parse(run.completedAt) : now;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return label;
+  const elapsed = end - start;
+  const duration = elapsed < 1000 ? "<1s" : elapsed < 60_000 ? `${elapsed < 10_000 ? (elapsed / 1000).toFixed(1) : Math.round(elapsed / 1000)}s` : `${Math.floor(elapsed / 60_000)}m ${Math.round((elapsed % 60_000) / 1000)}s`;
+  return `${label} · ${duration}`;
+}
+
+function WorkflowRunRecord({ flowRun, active, onSelect }: { flowRun: FlowRun; active: boolean; onSelect: () => void }) {
+  const status = flowRun.status === "succeeded" ? "Completed" : flowRun.status === "running" ? "Running" : flowRun.status.charAt(0).toUpperCase() + flowRun.status.slice(1);
+  return <section className="job-workflow-history">
+    <div className="file-tree-divider" />
+    <p className="file-group-label">Workflow run</p>
+    <button type="button" className={cn("job-workflow-record", active && "active")} onClick={onSelect} aria-pressed={active}>
+      <span className="job-workflow-icon"><GitBranch size={17} /></span>
+      <span><strong>{flowRun.definition.name}</strong><small>{status} · {flowRun.definition.nodes.length} nodes · revision {flowRun.workflowRevision}</small></span>
+      <ArrowRight size={15} />
+    </button>
+  </section>;
+}
+
+function WorkflowStatusNode({ data }: NodeProps<WorkflowStatusCanvasNode>) {
+  const { node, run } = data;
+  const status = run?.status || "pending";
+  const Icon = workflowNodeIcon(node);
   const detail = run?.error || run?.detail || (status === "running" ? "Processing now" : status === "pending" ? "Waiting for input" : status === "ready" ? "Ready to run" : status === "succeeded" ? "Completed" : status === "skipped" ? "Branch not selected" : status);
   return <div className={cn("workflow-status-node", `status-${status}`)} aria-label={`${nodeTitle(node)}: ${status}`}>
     {node.type !== "input" && <Handle type="target" position={Position.Left} isConnectable={false} className="workflow-status-handle" />}
     <span className="workflow-status-node-icon"><Icon size={20} /></span>
     <span className="workflow-status-node-copy"><strong>{nodeTitle(node)}</strong><small>{detail}</small></span>
-    <span className="workflow-status-node-state">{status === "running" ? <LoaderCircle size={16} className="animate-spin" /> : status === "succeeded" ? <Check size={16} /> : status === "failed" || status === "blocked" ? <TriangleAlert size={15} /> : status === "cancelled" ? <Square size={12} /> : <i />}{status}</span>
+    <span className="workflow-status-node-state" title={status} aria-hidden="true"><WorkflowNodeStateIcon status={status} /></span>
     {node.type !== "end" && node.type !== "fail" && <Handle type="source" position={Position.Right} isConnectable={false} className="workflow-status-handle" />}
   </div>;
 }
@@ -345,13 +418,16 @@ function WorkflowRunGraph({ flowRun }: { flowRun: FlowRun }) {
     selectable: false,
   })), [flowRun]);
   const edges = useMemo<Edge[]>(() => flowRun.definition.edges.map((edge) => {
-    const sourceStatus = flowRun.nodes[edge.from.nodeId]?.status || "pending";
+    const sourceRun = flowRun.nodes[edge.from.nodeId];
+    const sourceStatus = sourceRun?.status || "pending";
     const targetStatus = flowRun.nodes[edge.to.nodeId]?.status || "pending";
-    const running = targetStatus === "running";
-    const completed = sourceStatus === "succeeded" && ["running", "succeeded"].includes(targetStatus);
+    const selected = sourceRun?.selectedPortIds.includes(edge.from.portId) ?? false;
+    const running = selected && targetStatus === "running";
+    const completed = selected && sourceStatus === "succeeded" && ["running", "succeeded"].includes(targetStatus);
+    const inactive = sourceStatus === "skipped" || (sourceStatus === "succeeded" && Boolean(sourceRun?.selectedPortIds.length) && !selected);
     const color = running ? "#f1f3f4" : completed ? "#72d9a4" : "#555d67";
     const label = ["output", "files", "input"].includes(edge.from.portId) ? undefined : edge.from.portId;
-    return { id: edge.id, source: edge.from.nodeId, target: edge.to.nodeId, type: "smoothstep", animated: running, label, style: { stroke: color, strokeWidth: running ? 2.5 : 2, opacity: sourceStatus === "skipped" ? 0.35 : 1 }, markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18, color } };
+    return { id: edge.id, source: edge.from.nodeId, target: edge.to.nodeId, type: "smoothstep", animated: running, label, style: { stroke: color, strokeWidth: running ? 2.5 : 2, opacity: inactive ? 0.25 : 1 }, markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18, color } };
   }), [flowRun]);
   return <div className="workflow-status-graph" aria-label={`Live node status for ${flowRun.definition.name}`}>
     <ReactFlow<WorkflowStatusCanvasNode, Edge> nodes={nodes} edges={edges} nodeTypes={workflowStatusNodeTypes} fitView fitViewOptions={{ padding: 0.2, minZoom: 0.55, maxZoom: 1 }} minZoom={0.2} maxZoom={1.5} nodesDraggable={false} nodesConnectable={false} elementsSelectable={false} deleteKeyCode={null} colorMode="dark">

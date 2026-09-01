@@ -37,13 +37,14 @@ import {
   ScanText,
   Split,
   Trash2,
-  Upload,
   X,
 } from "lucide-react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { api, startWorkflow } from "../api";
+import { api } from "../api";
 import { cn, timeAgo } from "../components/ui";
 import { SearchSelect } from "../components/SearchSelect";
+import { useToast } from "../components/ToastProvider";
+import { RunWorkflowDialog } from "../components/RunWorkflowDialog";
 import {
   ARTIFACT_KINDS,
   type ArtifactKind,
@@ -79,6 +80,7 @@ const genericNodes: Array<{ type: WorkflowNodeType; title: string; icon: typeof 
   { type: "if", title: "If", icon: GitBranch },
   { type: "switch", title: "Switch", icon: Split },
   { type: "merge", title: "Merge", icon: Combine },
+  { type: "save", title: "Save to file", icon: Save },
   { type: "end", title: "End", icon: CircleStop },
   { type: "fail", title: "Fail", icon: X },
 ];
@@ -124,8 +126,17 @@ export function WorkflowsPage() {
       const latest = runs.find((run) => run.workflowId === definition.id);
       return <Link className="workflow-card" to={`/workflows/${definition.id}`} key={definition.id}>
         <span className="workflow-card-icon"><GitBranch size={23} /></span>
-        <span className="workflow-card-copy"><span><strong>{definition.name}</strong>{definition.enabled && <small>Enabled</small>}</span><p>{definition.description || "A reusable SparklingKit workflow"}</p><b>{definition.nodes.length} nodes · revision {definition.revision}</b></span>
-        {latest ? <span className={`flow-run-state ${flowStatusClass(latest.status)}`}><i />{latest.status}<small>{timeAgo(latest.updatedAt)}</small></span> : <ChevronRight size={19} />}
+        <span className="workflow-card-copy">
+          <strong>{definition.name}</strong>
+          <p>{definition.description || "A reusable SparklingKit workflow"}</p>
+          <span className="workflow-card-meta">
+            <b>{definition.nodes.length} nodes · revision {definition.revision}</b>
+            <span className="workflow-card-badges">
+              {definition.enabled && <small className="workflow-enabled-badge">Enabled</small>}
+              {latest ? <span className={`flow-run-state ${flowStatusClass(latest.status)}`}><i />{latest.status}<small>{timeAgo(latest.updatedAt)}</small></span> : <ChevronRight size={19} />}
+            </span>
+          </span>
+        </span>
       </Link>;
     })}</div> : <div className="workflow-empty"><GitBranch size={30} /><h2>Build your first workflow</h2><p>Start with a file, connect compatible services, and keep every result together.</p><button className="button-primary" onClick={() => void createWorkflow()}><Plus size={18} />New workflow</button></div>}
     {runs.length > 0 && <section className="workflow-recent"><h2>Recent runs</h2><div>{runs.slice(0, 10).map((run) => <Link to={`/jobs/${run.jobId}`} key={run.id}><span className={`flow-run-dot ${flowStatusClass(run.status)}`} /><span><strong>{run.definition.name}</strong><small>{run.stage} · {timeAgo(run.updatedAt)}</small></span><b>{run.progress}%</b><ChevronRight size={17} /></Link>)}</div></section>}
@@ -138,7 +149,18 @@ function CanvasWorkflowNode({ data, selected }: NodeProps<CanvasNode>) {
   const generic = genericNodes.find((candidate) => candidate.type === node.type);
   const Icon = serviceId ? serviceIcons[serviceId] || Braces : generic?.icon || Braces;
   const ports = nodeOutputPorts(node);
-  const detail = node.type === "module" ? serviceId === "translation" ? String((node.config.params as Record<string, unknown> | undefined)?.targetLanguage || "Choose language") : serviceId === "grounding" ? `${Array.isArray((node.config.params as Record<string, unknown> | undefined)?.queries) ? ((node.config.params as Record<string, unknown>).queries as unknown[]).length : 0} queries` : serviceId === "llm-prompt" ? "Custom instruction" : "Service" : node.type === "input" ? `${Array.isArray(node.config.accepts) ? node.config.accepts.length : 0} input types` : node.type === "select" ? `${Array.isArray(node.config.kinds) ? node.config.kinds.length : 0} result types` : node.type === "merge" ? String(node.config.mode || "all") : node.type === "if" ? "true / false" : node.type;
+  const predicate = node.config.predicate && typeof node.config.predicate === "object" ? node.config.predicate as Record<string, unknown> : undefined;
+  const factLabels: Record<string, string> = { "artifact.kind": "Artifact type", "artifact.text": "Text content", "artifact.mimeType": "MIME type", "artifact.role": "Artifact role", "input.fileCount": "File count" };
+  const operatorLabels: Record<string, string> = { equal: "=", notEqual: "≠", contains: "contains", startsWith: "starts with", exists: "exists", greaterThan: ">", lessThan: "<" };
+  const predicateDetail = predicate ? `${factLabels[String(predicate.fact)] || String(predicate.fact)} ${operatorLabels[String(predicate.operator)] || String(predicate.operator)}${predicate.operator === "exists" ? "" : ` ${String(predicate.value ?? "")}`}` : "true / false";
+  const serviceDetail = serviceId === "translation" ? String((node.config.params as Record<string, unknown> | undefined)?.targetLanguage || "Choose language")
+    : serviceId === "grounding" ? `${Array.isArray((node.config.params as Record<string, unknown> | undefined)?.queries) ? ((node.config.params as Record<string, unknown>).queries as unknown[]).length : 0} queries`
+      : serviceId === "llm-prompt" ? "Custom instruction" : "Service";
+  const detail = node.type === "module" ? `${serviceDetail}${serviceId !== "chat" && node.config.storeResult === false ? " · temporary" : ""}`
+    : node.type === "input" ? `${Array.isArray(node.config.accepts) ? node.config.accepts.length : 0} input types`
+      : node.type === "select" ? `${Array.isArray(node.config.kinds) ? node.config.kinds.length : 0} result types`
+        : node.type === "save" ? node.config.mode === "text" ? String(node.config.fileName || "Defined text") : String(node.config.fileName || "Incoming content")
+          : node.type === "merge" ? String(node.config.mode || "all") : node.type === "if" ? predicateDetail : node.type;
   return <div className={cn("workflow-node", `workflow-node-${node.type}`, serviceId && `workflow-node-${serviceId}`, selected && "selected")}>
     {node.type !== "input" && <Handle type="target" position={Position.Left} id="input" className="workflow-handle" />}
     <span className="workflow-node-icon"><Icon size={20} /></span><span><strong>{nodeTitle(node)}</strong><small>{detail}</small></span>
@@ -161,6 +183,7 @@ export function WorkflowEditorPage() {
   const [runOpen, setRunOpen] = useState(false);
   const [mobilePalette, setMobilePalette] = useState(false);
   const navigate = useNavigate();
+  const toast = useToast();
 
   useEffect(() => {
     setSelectedNodeIds([]);
@@ -232,12 +255,13 @@ export function WorkflowEditorPage() {
           : serviceId === "text-to-image" ? { prompt: "", size: "1024x1024" }
             : serviceId === "llm-prompt" ? { prompt: "Summarize the supplied material into clear Markdown.", temperature: 0.2, maxTokens: 8192 }
               : {};
-      return { moduleId: serviceId, workflowId: serviceId === "llm-prompt" ? "llm.prompt" : "auto", params };
+      return { moduleId: serviceId, workflowId: serviceId === "llm-prompt" ? "llm.prompt" : "auto", params, storeResult: true };
     }
     if (type === "select") return { kinds: ["document", "transcript", "translation", "generated-image", "grounded-image"] };
     if (type === "if") return { predicate: { fact: "artifact.kind", operator: "equal", value: "document" } };
     if (type === "switch") return { cases: [{ id: "documents", label: "Documents", predicate: { fact: "artifact.kind", operator: "equal", value: "document" } }] };
     if (type === "merge") return { mode: "all" };
+    if (type === "save") return { mode: "input", fileName: "", text: "" };
     if (type === "end") return { result: "incoming-artifacts" };
     if (type === "fail") return { message: "Workflow stopped because this condition was not met." };
     return {};
@@ -272,6 +296,7 @@ export function WorkflowEditorPage() {
     try {
       const result = await api.saveWorkflow(definition);
       setDefinition(result.definition); setValidation(result.validation);
+      toast.success("Workflow saved", `${result.definition.name} is stored as JSON.`);
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
       try { setValidation(await api.validateWorkflow(definition)); } catch { /* Keep the original save error. */ }
@@ -280,6 +305,7 @@ export function WorkflowEditorPage() {
   async function removeWorkflow() {
     if (!definition || !window.confirm(`Delete “${definition.name}”? Existing run snapshots will remain with their jobs.`)) return;
     await api.deleteWorkflow(definition.id);
+    toast.success("Workflow deleted", definition.name);
     navigate("/workflows");
   }
 
@@ -338,7 +364,7 @@ function MultiNodeInspector({ count, onArrange, onDelete }: { count: number; onA
 }
 
 function NodePalette({ definition, services, open, onClose, onAdd, onDrag }: { definition: WorkflowDefinition; services: ServiceCatalogItem[]; open: boolean; onClose: () => void; onAdd: (type: WorkflowNodeType, serviceId?: WorkflowServiceId) => void; onDrag: (event: DragEvent, type: WorkflowNodeType, serviceId?: WorkflowServiceId) => void }) {
-  return <aside className={cn("workflow-palette", open && "open")}><header><strong>Nodes</strong><button onClick={onClose} aria-label="Close node palette"><X size={18} /></button></header><section><h2>Services</h2>{services.map((service) => { const Icon = serviceIcons[service.id]; return <button draggable onDragStart={(event) => onDrag(event, "module", service.id)} onClick={() => onAdd("module", service.id)} key={service.id}><Icon size={18} /><span><strong>{service.title}</strong><small>{service.configured ? "Ready" : "Not configured"}</small></span><i className={service.configured ? "online" : ""} /></button>; })}</section><section><h2>Logic</h2>{genericNodes.map((item) => <button draggable={item.type !== "input" || !definition.nodes.some((node) => node.type === "input")} disabled={item.type === "input" && definition.nodes.some((node) => node.type === "input")} onDragStart={(event) => onDrag(event, item.type)} onClick={() => onAdd(item.type)} key={item.type}><item.icon size={18} /><span><strong>{item.title}</strong><small>{item.type === "input" ? "One per workflow" : item.type === "end" || item.type === "fail" ? "Terminal" : "Routing"}</small></span></button>)}</section></aside>;
+  return <aside className={cn("workflow-palette", open && "open")}><header><strong>Nodes</strong><button onClick={onClose} aria-label="Close node palette"><X size={18} /></button></header><section><h2>Services</h2>{services.map((service) => { const Icon = serviceIcons[service.id]; return <button draggable onDragStart={(event) => onDrag(event, "module", service.id)} onClick={() => onAdd("module", service.id)} key={service.id}><Icon size={18} /><span><strong>{service.title}</strong><small>{service.configured ? "Ready" : "Not configured"}</small></span><i className={service.configured ? "online" : ""} /></button>; })}</section><section><h2>Logic</h2>{genericNodes.map((item) => <button draggable={item.type !== "input" || !definition.nodes.some((node) => node.type === "input")} disabled={item.type === "input" && definition.nodes.some((node) => node.type === "input")} onDragStart={(event) => onDrag(event, item.type)} onClick={() => onAdd(item.type)} key={item.type}><item.icon size={18} /><span><strong>{item.title}</strong><small>{item.type === "input" ? "One per workflow" : item.type === "save" ? "Storage" : item.type === "end" || item.type === "fail" ? "Terminal" : "Routing"}</small></span></button>)}</section></aside>;
 }
 
 function NodeInspector({ node, definition, onChange, onDelete, onDeleteWorkflow }: { node?: WorkflowNode; definition: WorkflowDefinition; onChange: (node: WorkflowNode) => void; onDelete: (node: WorkflowNode) => void; onDeleteWorkflow: () => void }) {
@@ -359,9 +385,19 @@ function NodeInspector({ node, definition, onChange, onDelete, onDeleteWorkflow 
       {serviceId === "llm-prompt" && <><label>Instruction<textarea className="input" rows={6} value={String(params.prompt || "")} onChange={(event) => updateParams({ prompt: event.target.value })} /></label><label>System instruction<textarea className="input" rows={4} value={String(params.systemPrompt || "")} onChange={(event) => updateParams({ systemPrompt: event.target.value })} placeholder="Optional" /></label><label>Temperature<input className="input" type="number" min={0} max={2} step={0.1} value={Number(params.temperature ?? 0.2)} onChange={(event) => updateParams({ temperature: Number(event.target.value) })} /></label></>}
       {!["translation", "grounding", "text-to-image", "llm-prompt"].includes(serviceId || "") && <p className="workflow-inspector-note">This node uses the service defaults from Settings.</p>}
     </InspectorSection>}
+    {node.type === "module" && serviceId !== "chat" && <InspectorSection title="Result">
+      <label className="workflow-check-row"><input type="checkbox" checked={config.storeResult !== false} onChange={(event) => updateConfig({ storeResult: event.target.checked })} />Store the result</label>
+      <p className="workflow-inspector-note">When off, the result stays available to later nodes during this run, then is removed when the workflow finishes.</p>
+    </InspectorSection>}
     {node.type === "if" && <InspectorSection title="Condition"><PredicateEditor value={predicate} onChange={(value) => updateConfig({ predicate: value })} /></InspectorSection>}
     {node.type === "switch" && <InspectorSection title="Cases"><SwitchEditor cases={Array.isArray(config.cases) ? config.cases as Array<Record<string, unknown>> : []} onChange={(cases) => updateConfig({ cases })} /></InspectorSection>}
     {node.type === "merge" && <InspectorSection title="Wait policy"><label>Continue when<SearchSelect className="workflow-inspector-select" value={String(config.mode || "all")} onChange={(mode) => updateConfig({ mode })} options={[{ value: "all", label: "All active branches finish" }, { value: "any", label: "Any branch finishes" }]} searchPlaceholder="Search wait policies" ariaLabel="Merge wait policy" /></label></InspectorSection>}
+    {node.type === "save" && <InspectorSection title="File">
+      <label>Content<SearchSelect className="workflow-inspector-select" value={String(config.mode || "input")} onChange={(mode) => updateConfig({ mode })} options={[{ value: "input", label: "Incoming content" }, { value: "text", label: "Defined text" }]} searchPlaceholder="Search content sources" ariaLabel="File content source" /></label>
+      <label>File name<input className="input" value={String(config.fileName || "")} onChange={(event) => updateConfig({ fileName: event.target.value })} placeholder={config.mode === "text" ? "result.md" : "Use incoming file name"} /></label>
+      {config.mode === "text" && <label>Text<textarea className="input" rows={8} value={String(config.text || "")} onChange={(event) => updateConfig({ text: event.target.value })} placeholder="Content to store in the file" /></label>}
+      <p className="workflow-inspector-note">Incoming content copies the first artifact. Defined text saves exactly what you enter here.</p>
+    </InspectorSection>}
     {node.type === "fail" && <InspectorSection title="Failure"><label>Message<textarea className="input" rows={4} value={String(config.message || "")} onChange={(event) => updateConfig({ message: event.target.value })} /></label></InspectorSection>}
     {node.type === "end" && <div className="workflow-inspector-note">Every incoming artifact becomes a final workflow result.</div>}
   </div>{node.type !== "input" && <button className="workflow-delete-link" onClick={() => onDelete(node)}><Trash2 size={16} />Delete node</button>}</aside>;
@@ -376,31 +412,26 @@ function ArtifactChecks({ selected, onChange }: { selected: ArtifactKind[]; onCh
 }
 
 function PredicateEditor({ value, onChange }: { value: Record<string, unknown>; onChange: (value: Record<string, unknown>) => void }) {
-  return <div className="predicate-editor"><label>Fact<SearchSelect className="workflow-inspector-select" value={String(value.fact || "artifact.kind")} onChange={(fact) => onChange({ ...value, fact })} options={[{ value: "artifact.kind", label: "Artifact type" }, { value: "artifact.mimeType", label: "MIME type" }, { value: "artifact.role", label: "Artifact role" }, { value: "input.fileCount", label: "File count" }]} searchPlaceholder="Search facts" ariaLabel="Condition fact" /></label><label>Operator<SearchSelect className="workflow-inspector-select" value={String(value.operator || "equal")} onChange={(operator) => onChange({ ...value, operator })} options={[{ value: "equal", label: "Equals" }, { value: "notEqual", label: "Does not equal" }, { value: "contains", label: "Contains" }, { value: "exists", label: "Exists" }, { value: "greaterThan", label: "Greater than" }, { value: "lessThan", label: "Less than" }]} searchPlaceholder="Search operators" ariaLabel="Condition operator" /></label><label>Value<input className="input" value={String(value.value ?? "")} onChange={(event) => onChange({ ...value, value: value.fact === "input.fileCount" ? Number(event.target.value) : event.target.value })} /></label></div>;
+  const fact = String(value.fact || "artifact.kind");
+  const operator = String(value.operator || "equal");
+  const selectFact = (nextFact: string) => onChange({
+    ...value,
+    fact: nextFact,
+    value: nextFact === "artifact.kind" ? "document" : nextFact === "artifact.text" ? "true" : nextFact === "artifact.role" ? "primary" : nextFact === "input.fileCount" ? 1 : "text/plain",
+  });
+  const setValue = (nextValue: string) => onChange({ ...value, value: fact === "input.fileCount" ? Number(nextValue) : nextValue });
+  return <div className="predicate-editor">
+    <label>Check<SearchSelect className="workflow-inspector-select" value={fact} onChange={selectFact} options={[{ value: "artifact.kind", label: "Artifact type" }, { value: "artifact.text", label: "Text content" }, { value: "artifact.mimeType", label: "MIME type" }, { value: "artifact.role", label: "Artifact role" }, { value: "input.fileCount", label: "File count" }]} searchPlaceholder="Search available values" ariaLabel="Condition value source" /></label>
+    <label>Operator<SearchSelect className="workflow-inspector-select" value={operator} onChange={(nextOperator) => onChange({ ...value, operator: nextOperator })} options={[{ value: "equal", label: "Equals" }, { value: "notEqual", label: "Does not equal" }, { value: "contains", label: "Contains" }, { value: "startsWith", label: "Starts with" }, { value: "exists", label: "Exists" }, { value: "greaterThan", label: "Greater than" }, { value: "lessThan", label: "Less than" }]} searchPlaceholder="Search operators" ariaLabel="Condition operator" /></label>
+    {operator !== "exists" && <label>Value
+      {fact === "artifact.kind" ? <SearchSelect className="workflow-inspector-select" value={String(value.value || "")} onChange={setValue} options={ARTIFACT_KINDS.map((kind) => ({ value: kind, label: kind.replaceAll("-", " ") }))} placeholder="Select an artifact type" searchPlaceholder="Search artifact types" ariaLabel="Expected artifact type" />
+        : fact === "artifact.role" ? <SearchSelect className="workflow-inspector-select" value={String(value.value || "")} onChange={setValue} options={[{ value: "source", label: "Source" }, { value: "primary", label: "Primary" }, { value: "supplementary", label: "Supplementary" }]} placeholder="Select an artifact role" searchPlaceholder="Search artifact roles" ariaLabel="Expected artifact role" />
+          : <input className="input" type={fact === "input.fileCount" ? "number" : "text"} value={String(value.value ?? "")} onChange={(event) => setValue(event.target.value)} placeholder={fact === "artifact.text" ? "For example: true" : undefined} />}
+    </label>}
+    {fact === "artifact.text" && <p className="workflow-inspector-note">Reads the incoming text result and trims surrounding whitespace. Use this after an LLM prompt to route exact responses such as “true” or “false”.</p>}
+  </div>;
 }
 
 function SwitchEditor({ cases, onChange }: { cases: Array<Record<string, unknown>>; onChange: (cases: Array<Record<string, unknown>>) => void }) {
   return <div className="switch-editor">{cases.map((item, index) => { const predicate = item.predicate as Record<string, unknown> | undefined; return <div key={String(item.id)}><SearchSelect className="workflow-inspector-select" value={String(predicate?.value || "document")} onChange={(kind) => onChange(cases.map((candidate, candidateIndex) => candidateIndex === index ? { ...candidate, id: kind, label: kind, predicate: { fact: "artifact.kind", operator: "equal", value: kind } } : candidate))} options={ARTIFACT_KINDS.map((kind) => ({ value: kind, label: kind.replaceAll("-", " ") }))} searchPlaceholder="Search artifact types" ariaLabel="Switch artifact type" /><button onClick={() => onChange(cases.filter((_, candidateIndex) => candidateIndex !== index))} aria-label="Remove case"><X size={15} /></button></div>; })}<button className="button-secondary" onClick={() => { const kind = ARTIFACT_KINDS.find((candidate) => !cases.some((item) => (item.predicate as Record<string, unknown>)?.value === candidate)) || "text"; onChange([...cases, { id: kind, label: kind, predicate: { fact: "artifact.kind", operator: "equal", value: kind } }]); }}><Plus size={15} />Add case</button><small>An unmatched artifact follows the default port.</small></div>;
-}
-
-function RunWorkflowDialog({ definition, onClose }: { definition: WorkflowDefinition; onClose: () => void }) {
-  const inputNode = definition.nodes.find((node) => node.type === "input")!;
-  const accepts = Array.isArray(inputNode.config.accepts) ? inputNode.config.accepts as ArtifactKind[] : [];
-  const textAccepted = accepts.includes("text");
-  const [files, setFiles] = useState<File[]>([]);
-  const [text, setText] = useState("");
-  const [running, setRunning] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [error, setError] = useState("");
-  const navigate = useNavigate();
-  const fileAccept = [accepts.includes("source-image") && "image/*", accepts.includes("source-pdf") && "application/pdf", accepts.some((kind) => kind === "source-audio" || kind === "source-video") && "audio/*,video/*", textAccepted && ".txt,.md,.markdown,.html,.htm"].filter(Boolean).join(",");
-  async function run() {
-    if (!files.length && !text.trim()) return;
-    setRunning(true); setError("");
-    try {
-      const result = await startWorkflow(definition.id, files.length ? { files } : { text: text.trim() }, setProgress);
-      navigate(`/jobs/${result.job.id}`);
-    } catch (value) { setError(value instanceof Error ? value.message : String(value)); setRunning(false); }
-  }
-  return <div className="workflow-run-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="workflow-run-dialog" role="dialog" aria-modal="true" aria-labelledby="run-workflow-title"><header><div><h2 id="run-workflow-title">Run {definition.name}</h2><p>Add the input this workflow should process.</p></div><button onClick={onClose} aria-label="Close"><X size={20} /></button></header><div className="workflow-run-content"><label className="workflow-file-input"><Upload size={25} /><span><strong>{files.length ? files.length === 1 ? files[0].name : `${files.length} files selected` : "Choose files"}</strong><small>{accepts.map((kind) => kind.replace("source-", "")).join(", ")}</small></span><input type="file" accept={fileAccept} multiple={inputNode.config.multiple !== false} onChange={(event) => { setFiles([...event.target.files || []]); if (event.target.files?.length) setText(""); }} /></label>{textAccepted && <><div className="workflow-run-or"><span>or enter text</span></div><textarea className="input" rows={7} value={text} onChange={(event) => { setText(event.target.value); if (event.target.value) setFiles([]); }} placeholder="Paste text for the workflow…" /></>}{error && <div className="error-card">{error}</div>}{running && <div className="progress-track"><span className="progress-fill" style={{ width: `${progress}%` }} /></div>}</div><footer><button className="button-secondary" onClick={onClose}>Cancel</button><button className="button-primary" onClick={() => void run()} disabled={running || (!files.length && !text.trim())}>{running ? `Starting ${progress}%` : <><Play size={17} />Run workflow</>}</button></footer></section></div>;
 }

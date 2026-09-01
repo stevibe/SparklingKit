@@ -7,6 +7,7 @@ import { cn, ConfirmDialog, RenameDialog, timeAgo } from "../components/ui";
 import { MarkdownRenderer } from "../components/MarkdownRenderer";
 import type { Chat, ChatMessage, Job } from "../types";
 import { useGlobalSearch } from "../components/GlobalSearch";
+import { useToast } from "../components/ToastProvider";
 
 export function ChatPage() {
   const { id } = useParams();
@@ -34,6 +35,7 @@ export function ChatPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { openSearch } = useGlobalSearch();
+  const toast = useToast();
   const initialPrompt = ((location.state as { initialPrompt?: string } | null)?.initialPrompt || "").trim();
 
   useEffect(() => { api.chats().then(setChats).catch(() => undefined); }, [id, streaming]);
@@ -98,6 +100,7 @@ export function ChatPage() {
       setChat(renamed);
       setChats((items) => items.map((item) => item.id === renamed.id ? renamed : item));
       setRenameOpen(false);
+      toast.success("Conversation renamed", renamed.title);
     } catch (renameFailure) {
       setRenameError(renameFailure instanceof Error ? renameFailure.message : String(renameFailure));
     } finally {
@@ -116,6 +119,7 @@ export function ChatPage() {
         setSettledChatId(undefined);
         navigate("/chat", { replace: true });
       }
+      toast.success("Conversation deleted", deleteTarget.title);
       setDeleteTarget(undefined);
     } catch (deleteFailure) {
       setDeleteError(deleteFailure instanceof Error ? deleteFailure.message : String(deleteFailure));

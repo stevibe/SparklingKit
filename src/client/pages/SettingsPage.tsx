@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { AudioLines, Check, ChevronRight, CircleAlert, Clock3, Eye, EyeOff, FileCog, Files, Image as ImageIcon, Languages, LoaderCircle, Plus, Save, ScanSearch, ScanText, Server, SlidersHorizontal, Sparkles, X } from "lucide-react";
+import { Activity, AudioLines, ChevronRight, CircleAlert, Clock3, Eye, EyeOff, FileCog, Files, Image as ImageIcon, Languages, LoaderCircle, Plus, Save, ScanSearch, ScanText, Server, SlidersHorizontal, Sparkles, X } from "lucide-react";
 import { api } from "../api";
 import { cn } from "../components/ui";
 import { SearchSelect } from "../components/SearchSelect";
+import { useToast } from "../components/ToastProvider";
+import { announceSettingsUpdated } from "../settings-events";
 import type { EndpointHealth, EndpointKind, ModelInputCapability, PromptPreset, Settings } from "../types";
+
+type SettingsServiceKind = EndpointKind | "system-status";
 
 const endpointMeta: Record<EndpointKind, { title: string; caption: string; tint: string; icon: typeof AudioLines }> = {
   stt: { title: "Speech to text", caption: "Audio and video transcription", tint: "endpoint-icon endpoint-stt", icon: AudioLines },
@@ -13,6 +17,13 @@ const endpointMeta: Record<EndpointKind, { title: string; caption: string; tint:
   translation: { title: "Translation", caption: "Dedicated multilingual translation model", tint: "endpoint-icon endpoint-translation", icon: Languages },
   grounding: { title: "Grounding", caption: "Evidence location, highlighting, and redaction", tint: "endpoint-icon endpoint-grounding", icon: ScanSearch },
   "image-generation": { title: "Image generation", caption: "Text prompts to generated images", tint: "endpoint-icon endpoint-image-generation", icon: ImageIcon },
+};
+
+const systemStatusMeta = {
+  title: "System monitor",
+  caption: "Host, GPU, memory, and model status",
+  tint: "endpoint-icon endpoint-system-status",
+  icon: Activity,
 };
 
 const settingsSections = [
@@ -66,13 +77,14 @@ export function SettingsPage() {
   const [prompts, setPrompts] = useState<PromptPreset[]>([]);
   const [tests, setTests] = useState<Partial<Record<EndpointKind, EndpointHealth | "testing">>>({});
   const [showKeys, setShowKeys] = useState<Partial<Record<EndpointKind, boolean>>>({});
-  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"general" | "services" | "processing" | "prompts">("general");
-  const [selectedService, setSelectedService] = useState<EndpointKind>();
+  const [selectedService, setSelectedService] = useState<SettingsServiceKind>();
   const [editingPrompt, setEditingPrompt] = useState<PromptPreset>();
+  const toast = useToast();
   const activeSection = settingsSections.find((section) => section.key === tab)!;
-  const selectedServiceMeta = selectedService ? endpointMeta[selectedService] : undefined;
+  const selectedServiceMeta = selectedService === "system-status" ? systemStatusMeta : selectedService ? endpointMeta[selectedService] : undefined;
 
   function close() {
     const hasBackground = Boolean((location.state as { backgroundLocation?: unknown } | null)?.backgroundLocation);
@@ -110,10 +122,17 @@ export function SettingsPage() {
   }
 
   async function save() {
-    if (!settings) return;
+    if (!settings || saving) return;
+    setSaving(true);
     setError("");
-    try { setSettings(await api.saveSettings(settings)); setSaved(true); window.setTimeout(() => setSaved(false), 2000); }
+    try {
+      const savedSettings = await api.saveSettings(settings);
+      setSettings(savedSettings);
+      announceSettingsUpdated(savedSettings);
+      toast.success("Settings saved", "Your changes are now active.");
+    }
     catch (saveError) { setError(saveError instanceof Error ? saveError.message : String(saveError)); }
+    finally { setSaving(false); }
   }
   async function test(kind: EndpointKind) {
     if (!settings) return;
@@ -143,6 +162,7 @@ export function SettingsPage() {
     const savedPrompt = await api.savePrompt(prompt);
     setPrompts((items) => [...items.filter((item) => item.slug !== savedPrompt.slug), savedPrompt].sort((a, b) => a.name.localeCompare(b.name)));
     setEditingPrompt(undefined);
+    toast.success("Prompt preset saved", savedPrompt.name);
   }
 
   return (
@@ -162,7 +182,7 @@ export function SettingsPage() {
             </div>
             <div className="settings-dialog-actions">
               {tab === "prompts" && <button className="button-secondary" onClick={() => setEditingPrompt(blankPrompt())}><Plus size={16} />New preset</button>}
-              {tab !== "prompts" && !(tab === "services" && !selectedService) && settings && <button className="button-primary" onClick={save}>{saved ? <><Check size={16} />Saved</> : <><Save size={16} />Save changes</>}</button>}
+              {tab !== "prompts" && !(tab === "services" && !selectedService) && settings && <button className="button-primary" onClick={save} disabled={saving}>{saving ? <><LoaderCircle size={16} className="animate-spin" />Saving…</> : <><Save size={16} />Save changes</>}</button>}
             </div>
           </header>
           {error && <div className="error-card settings-error"><CircleAlert size={18} />{error}</div>}
@@ -173,7 +193,16 @@ export function SettingsPage() {
             </div><p className="settings-footnote">This device reports <strong>{browserTimezone.replaceAll("_", " ")}</strong>.</p></div>
           </section>}
           {tab === "services" && !selectedService && <section className="settings-section-block">
-            <h3>Available services</h3>
+            <h3>System</h3>
+            <div className="settings-group settings-service-list">
+              <button className="settings-service-row" onClick={() => setSelectedService("system-status")}>
+                <span className={systemStatusMeta.tint}><Activity size={18} /></span>
+                <span className="settings-service-copy"><strong>{systemStatusMeta.title}</strong><small>{systemStatusMeta.caption}</small></span>
+                <span className="settings-service-summary"><strong>{settings.systemStatus.baseUrl || "No endpoint configured"}</strong><small className={settings.systemStatus.baseUrl ? "ready" : ""}>{settings.systemStatus.baseUrl ? "Visible" : "Hidden"}</small></span>
+                <ChevronRight size={18} />
+              </button>
+            </div>
+            <h3 className="settings-service-section-title">AI services</h3>
             <div className="settings-group settings-service-list">{(["stt", "ocr", "llm", "translation", "grounding", "image-generation"] as EndpointKind[]).map((kind) => {
               const meta = endpointMeta[kind]; const endpoint = settings.endpoints[kind]; const Icon = meta.icon;
               const configured = Boolean(endpoint.baseUrl && endpoint.model);
@@ -185,11 +214,20 @@ export function SettingsPage() {
                 <ChevronRight size={18} />
               </button>;
             })}</div>
-            <p className="settings-footnote">Select a service to configure its endpoint, model, availability, and supported inputs.</p>
+            <p className="settings-footnote">Select an item to configure its connection and availability.</p>
           </section>}
 
-          {tab === "services" && selectedService && (() => {
-            const kind = selectedService; const meta = endpointMeta[kind]; const endpoint = settings.endpoints[kind]; const result = tests[kind]; const Icon = meta.icon;
+          {tab === "services" && selectedService === "system-status" && <section className="settings-service-detail">
+            <div className="settings-section-block"><h3>Connection</h3><div className="settings-group">
+              <div className="settings-service-enable-row"><div className="settings-group-identity"><span className={systemStatusMeta.tint}><Activity size={18} /></span><div><h3>Sidebar status</h3><p>Show live machine and accelerator information.</p></div></div><div className="settings-group-actions"><span className={cn("status-badge", settings.systemStatus.baseUrl ? "status-done" : "status-idle")}>{settings.systemStatus.baseUrl ? "Visible" : "Hidden"}</span></div></div>
+              <div className="settings-control-grid">
+                <label className="field-label settings-control-full">Base URL <span className="font-normal text-muted">(optional)</span><input className="input mt-2" value={settings.systemStatus.baseUrl} placeholder="http://192.0.2.10:8330" onChange={(event) => setSettings({ ...settings, systemStatus: { baseUrl: event.target.value } })} /></label>
+              </div>
+            </div><p className="settings-footnote">SparklingKit reads <strong>/v1/status</strong> from this service. Clear the URL and save to hide the machine-status block from the sidebar.</p></div>
+          </section>}
+
+          {tab === "services" && selectedService && selectedService !== "system-status" && (() => {
+            const kind = selectedService as EndpointKind; const meta = endpointMeta[kind]; const endpoint = settings.endpoints[kind]; const result = tests[kind]; const Icon = meta.icon;
             return <section className="settings-service-detail">
               <div className="settings-section-block"><h3>Connection</h3><div className="settings-group">
                 <div className="settings-service-enable-row"><div className="settings-group-identity"><span className={meta.tint}><Icon size={18} /></span><div><h3>Service availability</h3><p>Allow SparklingKit to use this endpoint.</p></div></div><div className="settings-group-actions">{result && result !== "testing" && <span className={cn("status-badge", result.ok ? "status-done" : "status-failed")}>{result.ok ? `${result.latencyMs} ms` : result.enabled ? "Offline" : "Disabled"}</span>}<label className={cn("settings-toggle", endpoint.enabled && "active")} title={`Enable ${meta.title}`}><input type="checkbox" checked={endpoint.enabled} onChange={(event) => setSettings({ ...settings, endpoints: { ...settings.endpoints, [kind]: { ...endpoint, enabled: event.target.checked } } })} /><i /></label><button className="button-secondary compact" onClick={() => test(kind)} disabled={result === "testing" || !endpoint.enabled}>{result === "testing" ? <><LoaderCircle size={15} className="animate-spin" /><span>Testing</span></> : <><span className="test-label-full">Test connection</span><span className="test-label-short">Test</span></>}</button></div></div>

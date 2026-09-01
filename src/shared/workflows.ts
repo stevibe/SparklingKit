@@ -16,6 +16,14 @@ export const WORKFLOW_LIMITS = { nodes: 50, edges: 100 } as const;
 export const TEXT_ARTIFACT_KINDS: ArtifactKind[] = ["document", "transcript", "translation", "redacted-document", "text"];
 export const IMAGE_ARTIFACT_KINDS: ArtifactKind[] = ["source-image", "generated-image", "grounded-image"];
 
+function savedFileKind(fileName: unknown): ArtifactKind {
+  const lower = typeof fileName === "string" ? fileName.trim().toLowerCase() : "";
+  if (/\.(?:png|jpe?g|webp|gif|avif)$/.test(lower)) return "generated-image";
+  if (/\.(?:srt|vtt)$/.test(lower)) return "subtitle";
+  if (lower.endsWith(".json")) return "structured-data";
+  return "document";
+}
+
 export interface WorkflowServiceContract {
   id: WorkflowServiceId;
   title: string;
@@ -45,11 +53,19 @@ export function workflowServiceContract(serviceId: unknown, modelInputs?: readon
 
 export function nodeTitle(node: WorkflowNode) {
   if (node.type === "module") return workflowServiceContract(node.config.moduleId)?.title || "Service";
-  return ({ input: "Input", select: "Select files", if: "If", switch: "Switch", merge: "Merge", end: "End", fail: "Fail" } as const)[node.type];
+  return ({ input: "Input", select: "Select files", if: "If", switch: "Switch", merge: "Merge", save: "Save to file", end: "End", fail: "Fail" } as const)[node.type];
 }
 
 function artifactKinds(value: unknown): ArtifactKind[] {
   return Array.isArray(value) ? [...new Set(value.filter((kind): kind is ArtifactKind => typeof kind === "string" && (ARTIFACT_KINDS as readonly string[]).includes(kind)))] : [];
+}
+
+export function workflowInputKinds(definition: WorkflowDefinition): ArtifactKind[] {
+  return artifactKinds(definition.nodes.find((node) => node.type === "input")?.config.accepts);
+}
+
+export function workflowAcceptsArtifact(definition: WorkflowDefinition, kind: ArtifactKind) {
+  return workflowInputKinds(definition).includes(kind);
 }
 
 export function declaredNodeInputKinds(node: WorkflowNode, definition: WorkflowDefinition, modelInputs?: readonly ModelInputCapability[]): ArtifactKind[] {
@@ -61,9 +77,13 @@ export function declaredNodeInputKinds(node: WorkflowNode, definition: WorkflowD
 }
 
 export function declaredNodeOutputKinds(node: WorkflowNode, definition: WorkflowDefinition, modelInputs?: readonly ModelInputCapability[]): ArtifactKind[] {
-  if (node.type === "input") return artifactKinds(node.config.accepts);
+  if (node.type === "input") return workflowInputKinds(definition);
   if (node.type === "module") return workflowServiceContract(node.config.moduleId, modelInputs)?.produces || [];
   if (node.type === "select") return artifactKinds(node.config.kinds);
+  if (node.type === "save") {
+    if (node.config.mode === "text") return [savedFileKind(node.config.fileName)];
+    return declaredNodeInputKinds(node, definition, modelInputs);
+  }
   if (node.type === "end" || node.type === "fail") return [];
   return declaredNodeInputKinds(node, definition, modelInputs);
 }
@@ -139,12 +159,16 @@ export function validateWorkflowDefinition(definition: WorkflowDefinition, model
       }
     }
     if (node.type === "if" && (!node.config.predicate || typeof node.config.predicate !== "object")) issue(issues, "if-predicate", "Configure the If condition", { nodeId: node.id });
+    if (node.type === "save") {
+      if (!["input", "text"].includes(String(node.config.mode || "input"))) issue(issues, "save-mode", "Choose incoming content or defined text", { nodeId: node.id });
+      if (node.config.mode === "text" && typeof node.config.text !== "string") issue(issues, "save-text", "Add the text to save", { nodeId: node.id });
+    }
   }
 
   const inputs = definition.nodes.filter((node) => node.type === "input");
-  const terminals = definition.nodes.filter((node) => node.type === "end" || node.type === "fail" || (node.type === "module" && node.config.moduleId === "chat"));
+  const terminals = definition.nodes.filter((node) => node.type === "save" || node.type === "end" || node.type === "fail" || (node.type === "module" && node.config.moduleId === "chat"));
   if (inputs.length !== 1) issue(issues, "input-count", "A workflow must contain exactly one Input node");
-  if (!terminals.length) issue(issues, "terminal-count", "Add at least one End, Fail, or Create chat node");
+  if (!terminals.length) issue(issues, "terminal-count", "Add at least one Save to file, End, Fail, or Create chat node");
 
   for (const edge of definition.edges) {
     if (edgeIds.has(edge.id)) issue(issues, "duplicate-edge", "Connection IDs must be unique", { edgeId: edge.id });
@@ -190,7 +214,7 @@ export function createStarterWorkflow(now = new Date().toISOString()): WorkflowD
     enabled: false,
     nodes: [
       { id: "input", type: "input", position: { x: 30, y: 180 }, config: { accepts: ["source-image", "source-pdf"], multiple: true, maximumFiles: 20 } },
-      { id: "ocr", type: "module", position: { x: 260, y: 180 }, config: { moduleId: "ocr", workflowId: "auto", params: {} } },
+      { id: "ocr", type: "module", position: { x: 260, y: 180 }, config: { moduleId: "ocr", workflowId: "auto", params: {}, storeResult: true } },
       { id: "end", type: "end", position: { x: 490, y: 180 }, config: { result: "incoming-artifacts" } },
     ],
     edges: [

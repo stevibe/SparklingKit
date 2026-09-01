@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes, useLocation, type Location } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { GlobalSearchProvider } from "./components/GlobalSearch";
+import { ToastProvider } from "./components/ToastProvider";
 import { SettingsPage } from "./pages/SettingsPage";
 
 const Dashboard = lazy(() => import("./pages/Dashboard").then((module) => ({ default: module.Dashboard })));
@@ -21,7 +22,7 @@ export function App() {
     : location;
 
   return (
-    <GlobalSearchProvider><AppShell>
+    <ToastProvider><GlobalSearchProvider><AppShell>
       <Suspense fallback={<div className="page-wrap"><div className="skeleton h-64" /></div>}>
         <Routes location={backgroundLocation}>
           <Route path="/" element={<Dashboard />} />
@@ -36,6 +37,6 @@ export function App() {
         </Routes>
       </Suspense>
       {settingsOpen && <SettingsPage />}
-    </AppShell></GlobalSearchProvider>
+    </AppShell></GlobalSearchProvider></ToastProvider>
   );
 }

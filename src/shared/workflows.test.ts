@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { WorkflowDefinition } from "./contracts.js";
-import { createStarterWorkflow, validateWorkflowDefinition } from "./workflows.js";
+import { createStarterWorkflow, validateWorkflowDefinition, workflowAcceptsArtifact, workflowInputKinds } from "./workflows.js";
 
 describe("workflow definition validation", () => {
   it("accepts the typed starter workflow", () => {
-    expect(validateWorkflowDefinition(createStarterWorkflow()).valid).toBe(true);
+    const workflow = createStarterWorkflow();
+    expect(validateWorkflowDefinition(workflow).valid).toBe(true);
+    expect(workflowInputKinds(workflow)).toEqual(["source-image", "source-pdf"]);
+    expect(workflowAcceptsArtifact(workflow, "source-pdf")).toBe(true);
+    expect(workflowAcceptsArtifact(workflow, "transcript")).toBe(false);
   });
 
   it("rejects incompatible connections and cycles", () => {

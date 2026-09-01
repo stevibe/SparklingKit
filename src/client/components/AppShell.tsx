@@ -2,7 +2,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { AudioLines, BrainCircuit, GitBranch, Image as ImageIcon, LayoutGrid, Languages, MessageCircle, PanelLeftClose, PanelLeftOpen, ScanSearch, ScanText, Search, Settings } from "lucide-react";
 import { api } from "../api";
-import type { Health, ModuleDescriptor, SparkStatus } from "../types";
+import { settingsUpdatedEvent } from "../settings-events";
+import type { Health, ModuleDescriptor, Settings as AppSettings, SparkStatus } from "../types";
 import { useGlobalSearch } from "./GlobalSearch";
 
 const moduleIcons = { "scan-text": ScanText, "audio-lines": AudioLines, languages: Languages, "scan-search": ScanSearch, image: ImageIcon, "message-circle": MessageCircle };
@@ -30,6 +31,7 @@ function gibibytes(bytes: number) {
 export function AppShell({ children }: { children: ReactNode }) {
   const [health, setHealth] = useState<Health>();
   const [sparkStatus, setSparkStatus] = useState<SparkStatus>();
+  const [systemStatusBaseUrl, setSystemStatusBaseUrl] = useState<string>();
   const [modules, setModules] = useState<ModuleDescriptor[]>([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try { return window.localStorage.getItem(sidebarPreferenceKey) === "true"; } catch { return false; }
@@ -46,11 +48,28 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, []);
   useEffect(() => {
     let active = true;
+    const applySettings = (settings: AppSettings) => {
+      if (active) setSystemStatusBaseUrl(settings.systemStatus.baseUrl.trim());
+    };
+    const handleSettingsUpdated = (event: Event) => applySettings((event as CustomEvent<AppSettings>).detail);
+    api.settings().then(applySettings).catch(() => active && setSystemStatusBaseUrl(""));
+    window.addEventListener(settingsUpdatedEvent, handleSettingsUpdated);
+    return () => {
+      active = false;
+      window.removeEventListener(settingsUpdatedEvent, handleSettingsUpdated);
+    };
+  }, []);
+  useEffect(() => {
+    if (!systemStatusBaseUrl) {
+      setSparkStatus(undefined);
+      return;
+    }
+    let active = true;
     const refresh = () => api.systemStatus().then((value) => active && setSparkStatus(value)).catch(() => active && setSparkStatus(undefined));
     refresh();
     const timer = window.setInterval(refresh, 10_000);
     return () => { active = false; window.clearInterval(timer); };
-  }, []);
+  }, [systemStatusBaseUrl]);
   useEffect(() => { api.modules().then(setModules).catch(() => setModules([])); }, []);
   const enabled = health ? Object.values(health.endpoints).filter((item) => item.enabled) : [];
   const healthy = enabled.filter((item) => item.ok).length;
@@ -88,15 +107,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           <NavLink to="/settings" state={{ backgroundLocation: location }} title="Settings" aria-label="Settings" className={({ isActive }) => `nav-link settings-nav-link ${isActive ? "nav-link-active" : ""}`}><Settings size={19} strokeWidth={1.8} /><span>Settings</span></NavLink>
         </nav>
         <div className="mt-auto">
-          <div className="spark-monitor">
-            <div className="spark-monitor-heading"><strong>DGX Spark</strong><span className={sparkStatus ? "online" : ""}><i />{sparkStatus ? "Live" : "Unavailable"}</span></div>
+          {systemStatusBaseUrl && <div className="spark-monitor">
+            <div className="spark-monitor-heading"><strong>{sparkStatus?.host.hostname || "System monitor"}</strong><span className={sparkStatus ? "online" : ""}><i />{sparkStatus ? "Live" : "Unavailable"}</span></div>
             {memory ? <>
               <div className="spark-monitor-metric"><span>VRAM</span><strong>{gibibytes(memory.usedBytes)} / {gibibytes(memory.totalBytes)}</strong></div>
               <div className="spark-memory-track"><i style={{ width: `${Math.min(100, memory.usedPercent)}%` }} /></div>
               <div className="spark-monitor-metric spark-monitor-cuda"><span>CUDA allocations</span><strong>{gibibytes(sparkStatus.gpu.allocatedProcessMemoryBytes)}</strong></div>
               <div className="spark-monitor-foot"><span>GPU {gpu?.utilizationPercent ?? 0}%{gpu?.temperatureC != null ? ` · ${gpu.temperatureC}°C` : ""}</span><span>{onlineModels}/6 models</span></div>
-            </> : <small>Status reporter on port 8330</small>}
-          </div>
+            </> : <small>Waiting for status data</small>}
+          </div>}
           <div className="service-monitor">
             <div className="status-card-heading">
               <strong>AI services</strong>

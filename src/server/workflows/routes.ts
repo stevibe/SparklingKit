@@ -67,6 +67,11 @@ function projectedArtifactKind(file: Express.Multer.File) {
   return kind === "audio" ? file.mimetype.startsWith("video/") ? "source-video" : "source-audio" : kind === "pdf" ? "source-pdf" : kind === "image" ? "source-image" : "text";
 }
 
+async function updateFlowJob(jobId: string, patch: Omit<Partial<JobManifest>, "runs">) {
+  const current = await readJob(jobId);
+  return updateJob(jobId, { ...patch, runs: current.runs });
+}
+
 async function validation(definition: WorkflowDefinition) {
   const settings = await readSettings();
   const result = validateWorkflowDefinition(definition, settings.endpoints.llm.capabilities || ["text"]);
@@ -149,11 +154,12 @@ router.post("/workflows/:workflowId/runs", upload.array("files", 100), async (re
     const inputs = inputArtifactIds.map((id) => job.artifacts.find((artifact) => artifact.id === id)!);
     if (inputs.some((artifact) => !accepts.has(artifact.kind))) return response.status(400).json({ error: `Input accepts ${[...accepts].join(", ")}` });
     const flow = await createFlowRun(definition, job.id, inputArtifactIds, variables);
+    if (existingJobId) job = await updateFlowJob(job.id, { status: "queued", progress: 0, stage: `Waiting for workflow · ${definition.name}`, workflowId: `flow:${definition.id}`, error: undefined, cancelRequested: false, completedAt: undefined });
     try {
       await enqueueFlowRun(job.id, flow.id);
     } catch (error) {
       await updateFlowRun(job.id, flow.id, { status: "failed", stage: "Queue unavailable", error: error instanceof Error ? error.message : String(error), completedAt: new Date().toISOString() });
-      await updateJob(job.id, { status: "failed", stage: "Queue unavailable", error: error instanceof Error ? error.message : String(error) });
+      await updateFlowJob(job.id, { status: "failed", stage: "Queue unavailable", error: error instanceof Error ? error.message : String(error) });
       throw error;
     }
     response.status(202).json({ job: await readJob(job.id), flow });
@@ -197,7 +203,7 @@ router.post("/jobs/:jobId/flows/:flowRunId/cancel", async (request, response) =>
     for (const node of Object.values(next.nodes)) if (["pending", "ready", "running", "blocked"].includes(node.status)) node.status = "cancelled";
     return next;
   });
-  await updateJob(current.jobId, { status: "cancelled", stage: "Stopped", error: undefined, completedAt: new Date().toISOString() });
+  await updateFlowJob(current.jobId, { status: "cancelled", stage: "Stopped", error: undefined, completedAt: new Date().toISOString() });
   response.json(flow);
 });
 router.post("/jobs/:jobId/flows/:flowRunId/retry", async (request, response) => {
@@ -220,7 +226,7 @@ router.post("/jobs/:jobId/flows/:flowRunId/retry", async (request, response) => 
     }
     return next;
   });
-  await updateJob(current.jobId, { status: "queued", stage: "Waiting for workflow", progress: flow.progress, error: undefined, cancelRequested: false, completedAt: undefined });
+  await updateFlowJob(current.jobId, { status: "queued", stage: "Waiting for workflow", progress: flow.progress, error: undefined, cancelRequested: false, completedAt: undefined });
   await enqueueFlowRun(current.jobId, current.id);
   response.status(202).json(flow);
 });

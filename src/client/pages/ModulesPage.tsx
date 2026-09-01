@@ -9,6 +9,7 @@ import { savedTranslationPreferences, translationLanguages, translationPreferenc
 import type { Job, JobKind, ModuleDescriptor, ModuleId } from "../types";
 import { useGlobalSearch } from "../components/GlobalSearch";
 import { SearchSelect } from "../components/SearchSelect";
+import { useToast } from "../components/ToastProvider";
 
 export { translationLanguages } from "../translation";
 
@@ -86,6 +87,7 @@ export function ModulePage() {
   const [searchParams] = useSearchParams();
   const translationPreviewController = useRef<AbortController | undefined>(undefined);
   const importedPromptRef = useRef("");
+  const toast = useToast();
   const onDrop = useCallback((accepted: File[]) => { setFiles(accepted); setSelectedArtifact(""); setError(""); }, []);
   const accepts = useMemo<Record<string, string[]>>(() => Object.fromEntries(moduleId === "ocr"
     ? [["image/*", []], ["application/pdf", [".pdf"]]]
@@ -221,6 +223,7 @@ export function ModulePage() {
           if (!response.ok) throw new Error("Could not load the translated text");
           setTranslatedText((await response.text()).trim());
           setJobs((items) => [current, ...items.filter((job) => job.id !== current.id)]);
+          toast.success("Translation saved", "Added to translation history.");
           return;
         }
         if (["failed", "cancelled"].includes(current.status)) throw new Error(current.error || `Translation ${current.status}`);

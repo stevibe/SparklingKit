@@ -1,12 +1,19 @@
-import type { Artifact, ArtifactKind, FlowNodeRun, FlowRun, ModuleId, WorkflowNode } from "../../shared/contracts.js";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import type { Artifact, ArtifactKind, FlowNodeRun, FlowRun, JobManifest, ModuleId, WorkflowNode } from "../../shared/contracts.js";
 import { moduleWorkflowForArtifact } from "../../shared/module-router.js";
 import { edgeArtifactKinds, nodeTitle, validateWorkflowDefinition, workflowServiceContract } from "../../shared/workflows.js";
 import { publishJob } from "../events.js";
 import { processRun } from "../processor.js";
-import { createChat, createWorkflowRun, readJob, readSettings, updateJob, writeChat } from "../store.js";
+import { createChat, createWorkflowRun, readJob, readSettings, safeArtifactPath, safeOutputPath, updateJob, writeChat } from "../store.js";
 import { readFlowRun, updateFlowRun } from "./store.js";
 
 const terminalNodeStates = new Set(["succeeded", "failed", "skipped", "cancelled"]);
+
+async function updateFlowJob(jobId: string, patch: Omit<Partial<JobManifest>, "runs">) {
+  const current = await readJob(jobId);
+  return updateJob(jobId, { ...patch, runs: current.runs });
+}
 
 function unique(values: string[]) {
   return [...new Set(values)];
@@ -35,11 +42,17 @@ function incomingArtifacts(flow: FlowRun, node: WorkflowNode, artifacts: Artifac
   return unique(ids);
 }
 
-function factValue(fact: string, artifacts: Artifact[], flow: FlowRun): unknown {
+const textualArtifactKinds = new Set<ArtifactKind>(["document", "transcript", "subtitle", "translation", "annotations", "redacted-document", "structured-data", "text"]);
+
+async function factValue(fact: string, artifacts: Artifact[], flow: FlowRun): Promise<unknown> {
   const first = artifacts[0];
   if (fact === "artifact.kind") return first?.kind;
   if (fact === "artifact.mimeType") return first?.mimeType;
   if (fact === "artifact.role") return first?.role;
+  if (fact === "artifact.text") {
+    if (!first || (!textualArtifactKinds.has(first.kind) && !first.mimeType.startsWith("text/") && !first.mimeType.includes("json"))) return undefined;
+    return (await fs.readFile(safeArtifactPath(flow.jobId, first.path), "utf8")).trim();
+  }
   if (fact === "input.fileCount") return artifacts.length;
   if (fact.startsWith("artifact.metadata.")) {
     return fact.slice("artifact.metadata.".length).split(".").reduce<unknown>((value, key) => value && typeof value === "object" ? (value as Record<string, unknown>)[key] : undefined, first?.metadata);
@@ -63,13 +76,19 @@ function compare(actual: unknown, operator: string, expected: unknown) {
   return false;
 }
 
-function evaluatePredicate(predicate: unknown, artifacts: Artifact[], flow: FlowRun): boolean {
+export async function evaluatePredicate(predicate: unknown, artifacts: Artifact[], flow: FlowRun): Promise<boolean> {
   if (!predicate || typeof predicate !== "object") return false;
   const record = predicate as Record<string, unknown>;
-  if (Array.isArray(record.all)) return record.all.every((item) => evaluatePredicate(item, artifacts, flow));
-  if (Array.isArray(record.any)) return record.any.some((item) => evaluatePredicate(item, artifacts, flow));
+  if (Array.isArray(record.all)) {
+    for (const item of record.all) if (!await evaluatePredicate(item, artifacts, flow)) return false;
+    return true;
+  }
+  if (Array.isArray(record.any)) {
+    for (const item of record.any) if (await evaluatePredicate(item, artifacts, flow)) return true;
+    return false;
+  }
   if (typeof record.fact !== "string" || typeof record.operator !== "string") return false;
-  return compare(factValue(record.fact, artifacts, flow), record.operator, record.value);
+  return compare(await factValue(record.fact, artifacts, flow), record.operator, record.value);
 }
 
 function moduleGroups(node: WorkflowNode, artifacts: Artifact[]): Array<{ moduleId: ModuleId | "text-transform"; workflowId: string; artifacts: Artifact[] }> {
@@ -123,6 +142,55 @@ async function executeModule(flow: FlowRun, node: WorkflowNode, inputIds: string
   return { outputArtifactIds: unique(outputArtifactIds), childRunIds, detail: `${groups.length} service run${groups.length === 1 ? "" : "s"}` };
 }
 
+function cleanOutputFileName(value: unknown, fallback: string) {
+  const base = path.basename(typeof value === "string" && value.trim() ? value.trim() : fallback);
+  const cleaned = base.replace(/[^a-zA-Z0-9._ -]+/g, "-").replace(/\s+/g, " ").replace(/^[. -]+|[. -]+$/g, "");
+  return cleaned || "result.md";
+}
+
+async function availableOutputFileName(jobId: string, requested: string) {
+  const extension = path.extname(requested);
+  const stem = extension ? requested.slice(0, -extension.length) : requested;
+  for (let index = 1; ; index += 1) {
+    const candidate = index === 1 ? requested : `${stem}-${index}${extension}`;
+    try {
+      await fs.access(safeOutputPath(jobId, candidate));
+    } catch {
+      return candidate;
+    }
+  }
+}
+
+async function executeSave(flow: FlowRun, node: WorkflowNode, inputIds: string[]) {
+  const job = await readJob(flow.jobId);
+  const incoming = inputIds.map((id) => job.artifacts.find((artifact) => artifact.id === id)).find((artifact): artifact is Artifact => Boolean(artifact));
+  const mode = node.config.mode === "text" ? "text" : "input";
+  if (mode === "input" && !incoming) throw new Error("Save to file needs an incoming artifact");
+  const fallback = mode === "text" ? "result.md" : incoming!.name;
+  const requested = cleanOutputFileName(node.config.fileName, fallback);
+  const fileName = await availableOutputFileName(flow.jobId, requested);
+  const destination = safeOutputPath(flow.jobId, fileName);
+  await fs.mkdir(path.dirname(destination), { recursive: true });
+  if (mode === "text") await fs.writeFile(destination, String(node.config.text || ""), "utf8");
+  else await fs.copyFile(safeArtifactPath(flow.jobId, incoming!.path), destination);
+
+  let updated = await updateJob(flow.jobId, { outputFiles: unique([...job.outputFiles, fileName]) });
+  const artifactPath = `output/${fileName}`;
+  const created = updated.artifacts.find((artifact) => artifact.path === artifactPath);
+  if (!created) throw new Error("The saved file could not be registered");
+  const saved: Artifact = {
+    ...created,
+    kind: mode === "input" ? incoming!.kind : created.kind,
+    mimeType: mode === "input" ? incoming!.mimeType : created.mimeType,
+    createdByRunId: undefined,
+    createdByStepId: node.id,
+    derivedFrom: inputIds,
+    metadata: { ...created.metadata, savedByWorkflowNode: node.id, saveMode: mode },
+  };
+  updated = await updateJob(flow.jobId, { artifacts: updated.artifacts.map((artifact) => artifact.id === saved.id ? saved : artifact) });
+  return { outputArtifactIds: [saved.id], childRunIds: [], selectedPortIds: ["output"], detail: `Saved ${fileName}` };
+}
+
 async function executeNode(flow: FlowRun, node: WorkflowNode, inputIds: string[], signal?: AbortSignal) {
   const job = await readJob(flow.jobId);
   const artifacts = inputIds.map((id) => job.artifacts.find((artifact) => artifact.id === id)).filter((artifact): artifact is Artifact => Boolean(artifact));
@@ -130,22 +198,73 @@ async function executeNode(flow: FlowRun, node: WorkflowNode, inputIds: string[]
     const result = await executeModule(flow, node, inputIds, signal);
     return { ...result, selectedPortIds: ["output"] };
   }
+  if (node.type === "save") return executeSave(flow, node, inputIds);
   if (node.type === "select") {
     const kinds = new Set(Array.isArray(node.config.kinds) ? node.config.kinds.filter((kind): kind is ArtifactKind => typeof kind === "string") : []);
     return { outputArtifactIds: artifacts.filter((artifact) => kinds.has(artifact.kind)).map((artifact) => artifact.id), childRunIds: [], selectedPortIds: ["output"], detail: `${artifacts.filter((artifact) => kinds.has(artifact.kind)).length} selected` };
   }
   if (node.type === "if") {
-    const selected = evaluatePredicate(node.config.predicate, artifacts, flow) ? "true" : "false";
+    const selected = await evaluatePredicate(node.config.predicate, artifacts, flow) ? "true" : "false";
     return { outputArtifactIds: inputIds, childRunIds: [], selectedPortIds: [selected], detail: `Continued through ${selected}` };
   }
   if (node.type === "switch") {
     const cases = Array.isArray(node.config.cases) ? node.config.cases : [];
-    const match = cases.find((candidate) => candidate && typeof candidate === "object" && evaluatePredicate((candidate as Record<string, unknown>).predicate, artifacts, flow)) as Record<string, unknown> | undefined;
+    let match: Record<string, unknown> | undefined;
+    for (const candidate of cases) {
+      if (!candidate || typeof candidate !== "object") continue;
+      if (await evaluatePredicate((candidate as Record<string, unknown>).predicate, artifacts, flow)) { match = candidate as Record<string, unknown>; break; }
+    }
     const selected = typeof match?.id === "string" ? match.id : "default";
     return { outputArtifactIds: inputIds, childRunIds: [], selectedPortIds: [selected], detail: `Continued through ${selected}` };
   }
   if (node.type === "fail") throw new Error(typeof node.config.message === "string" ? node.config.message : "Workflow stopped at a Fail node");
   return { outputArtifactIds: inputIds, childRunIds: [], selectedPortIds: node.type === "end" ? [] : ["output"], detail: node.type === "end" ? "Result collected" : `${inputIds.length} artifact${inputIds.length === 1 ? "" : "s"}` };
+}
+
+async function removeTemporaryResults(flow: FlowRun) {
+  const temporaryIds = new Set(flow.definition.nodes
+    .filter((node) => node.type === "module" && node.config.moduleId !== "chat" && node.config.storeResult === false)
+    .flatMap((node) => flow.nodes[node.id]?.outputArtifactIds || []));
+  if (!temporaryIds.size) return temporaryIds;
+
+  const persistentIds = new Set([
+    ...flow.inputArtifactIds,
+    ...flow.definition.nodes
+      .filter((node) => (node.type === "module" && node.config.moduleId !== "chat" && node.config.storeResult !== false) || node.type === "save")
+      .flatMap((node) => flow.nodes[node.id]?.outputArtifactIds || []),
+  ]);
+  for (const id of persistentIds) temporaryIds.delete(id);
+  if (!temporaryIds.size) return temporaryIds;
+
+  const job = await readJob(flow.jobId);
+  const removed = new Map(job.artifacts.filter((artifact) => temporaryIds.has(artifact.id)).map((artifact) => [artifact.id, artifact]));
+  const lineage = (id: string, seen = new Set<string>()): string[] => {
+    if (seen.has(id)) return [];
+    const artifact = removed.get(id);
+    if (!artifact) return [id];
+    seen.add(id);
+    return artifact.derivedFrom.flatMap((parent) => lineage(parent, seen));
+  };
+  const remainingArtifacts = job.artifacts
+    .filter((artifact) => !temporaryIds.has(artifact.id))
+    .map((artifact) => ({ ...artifact, derivedFrom: unique(artifact.derivedFrom.flatMap((id) => lineage(id))) }));
+  const removedPaths = new Set([...removed.values()].map((artifact) => artifact.path));
+  for (const artifact of removed.values()) {
+    if (!artifact.path.startsWith("output/")) continue;
+    try { await fs.unlink(safeArtifactPath(flow.jobId, artifact.path)); } catch (error) {
+      if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) throw error;
+    }
+  }
+  await updateJob(flow.jobId, {
+    artifacts: remainingArtifacts,
+    outputFiles: job.outputFiles.filter((file) => !removedPaths.has(`output/${file}`)),
+    runs: job.runs.map((run) => ({
+      ...run,
+      inputArtifactIds: unique(run.inputArtifactIds.flatMap((id) => lineage(id))),
+      outputArtifactIds: run.outputArtifactIds.filter((id) => !temporaryIds.has(id)),
+    })),
+  });
+  return temporaryIds;
 }
 
 function nextReadyNode(flow: FlowRun) {
@@ -197,7 +316,7 @@ export async function processFlowRun(jobId: string, flowRunId: string, signal?: 
     for (const node of Object.values(current.nodes)) if (node.status === "running") node.status = "pending";
     return current;
   });
-  const startedJob = await updateJob(jobId, { status: "processing", stage: `Workflow · ${flow.definition.name}`, progress: 1, startedAt: now, cancelRequested: false, error: undefined });
+  const startedJob = await updateFlowJob(jobId, { status: "processing", stage: `Workflow · ${flow.definition.name}`, progress: 1, startedAt: now, cancelRequested: false, error: undefined });
   publishJob(jobId, startedJob);
   try {
     while (true) {
@@ -222,10 +341,12 @@ export async function processFlowRun(jobId: string, flowRunId: string, signal?: 
     if (pending.length) throw new Error(`Workflow cannot continue at ${pending.map((node) => node.nodeId).join(", ")}`);
     const failed = Object.values(flow.nodes).find((node) => node.status === "failed");
     if (failed) throw new Error(failed.error || `Workflow failed at ${failed.nodeId}`);
-    const ends = flow.definition.nodes.filter((node) => node.type === "end" && flow.nodes[node.id]?.status === "succeeded");
-    const outputArtifactIds = unique(ends.flatMap((node) => flow.nodes[node.id].outputArtifactIds));
+    const resultNodes = flow.definition.nodes.filter((node) => (node.type === "end" || node.type === "save") && flow.nodes[node.id]?.status === "succeeded");
+    const outputArtifactIds = unique(resultNodes.flatMap((node) => flow.nodes[node.id].outputArtifactIds));
     flow = await updateFlowRun(jobId, flowRunId, { status: "succeeded", progress: 100, stage: "Complete", outputArtifactIds, completedAt: new Date().toISOString(), error: undefined, cancelRequested: false });
-    const completedJob = await updateJob(jobId, { status: "done", progress: 100, stage: "Workflow complete", error: undefined, cancelRequested: false, completedAt: new Date().toISOString() });
+    const removedIds = await removeTemporaryResults(flow);
+    if (removedIds.size) flow = await updateFlowRun(jobId, flowRunId, { outputArtifactIds: flow.outputArtifactIds.filter((id) => !removedIds.has(id)) });
+    const completedJob = await updateFlowJob(jobId, { status: "done", progress: 100, stage: "Workflow complete", error: undefined, cancelRequested: false, completedAt: new Date().toISOString() });
     publishJob(jobId, completedJob);
     return flow;
   } catch (error) {
@@ -238,7 +359,8 @@ export async function processFlowRun(jobId: string, flowRunId: string, signal?: 
       error: cancelled ? undefined : message,
       completedAt: cancelled || !blocked ? new Date().toISOString() : undefined,
     });
-    const failedJob = await updateJob(jobId, { status: cancelled ? "cancelled" : "failed", stage: flow.stage, error: flow.error, completedAt: new Date().toISOString() });
+    if (!blocked) await removeTemporaryResults(flow);
+    const failedJob = await updateFlowJob(jobId, { status: cancelled ? "cancelled" : "failed", stage: flow.stage, error: flow.error, completedAt: new Date().toISOString() });
     publishJob(jobId, failedJob);
     if (!cancelled && !blocked) throw error;
     return flow;

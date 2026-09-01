@@ -9,7 +9,7 @@ import { ENDPOINT_KINDS, MODEL_INPUT_CAPABILITIES, MODULE_IDS, SEARCH_SCOPES } f
 import { getModuleContract, moduleAcceptsArtifact, moduleWorkflowForArtifact } from "../shared/module-router.js";
 import { checkEndpoint, openChatStream } from "./ai.js";
 import { modelMessagesForChat } from "./chat-messages.js";
-import { CLIENT_DIR, DATA_DIR, PORT, SYSTEM_STATUS_BASE_URL } from "./config.js";
+import { CLIENT_DIR, DATA_DIR, PORT } from "./config.js";
 import { jobEvents, publishJob } from "./events.js";
 import type { ChatMessage, EndpointKind, JobKind, PromptPreset, Settings } from "./models.js";
 import { listModules } from "./modules/registry.js";
@@ -70,6 +70,7 @@ const endpointSchema = z.object({
 }).refine((endpoint) => !endpoint.enabled || Boolean(endpoint.baseUrl && endpoint.model), "Enabled services require a base URL and model");
 const settingsSchema = z.object({
   schemaVersion: z.literal(2),
+  systemStatus: z.object({ baseUrl: z.union([z.string().url(), z.literal("")]) }),
   endpoints: z.object({ stt: endpointSchema, ocr: endpointSchema, llm: endpointSchema, translation: endpointSchema, grounding: endpointSchema, "image-generation": endpointSchema }),
   audio: z.object({
     chunkTargetSec: z.number().int().min(15).max(3600),
@@ -144,7 +145,11 @@ app.get("/api/health", async (_request, response) => {
 
 app.get("/api/system/status", async (_request, response) => {
   try {
-    const upstream = await fetch(`${SYSTEM_STATUS_BASE_URL.replace(/\/$/, "")}/v1/status`, {
+    const { baseUrl } = (await readSettings()).systemStatus;
+    if (!baseUrl) return response.status(204).end();
+    const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+    const statusUrl = normalizedBaseUrl.endsWith("/v1/status") ? normalizedBaseUrl : `${normalizedBaseUrl}/v1/status`;
+    const upstream = await fetch(statusUrl, {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(5000),
     });

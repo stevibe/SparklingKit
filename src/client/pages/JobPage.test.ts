@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { extractHtml, getFileKind, htmlDocument, linkedChatsForJob, markdownForPreview } from "./JobPage";
+import { extractHtml, flowNodeHistoryLabel, getFileKind, htmlDocument, linkedChatsForJob, markdownForPreview } from "./JobPage";
+import type { FlowNodeRun } from "../../shared/contracts";
 import type { Chat } from "../types";
 
 describe("job output preview", () => {
@@ -52,5 +53,12 @@ describe("job chat backlinks", () => {
       { id: "chat-c", linkedJobId: "job-a" },
     ] as Chat[];
     expect(linkedChatsForJob(chats, "job-a").map((chat) => chat.id)).toEqual(["chat-a", "chat-c"]);
+  });
+});
+
+describe("workflow node history", () => {
+  it("keeps a compact final state and elapsed time", () => {
+    const run = { status: "succeeded", startedAt: "2026-09-01T00:00:00.000Z", completedAt: "2026-09-01T00:00:12.400Z" } as FlowNodeRun;
+    expect(flowNodeHistoryLabel(run)).toBe("Completed · 12s");
   });
 });

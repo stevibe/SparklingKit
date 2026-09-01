@@ -6,7 +6,7 @@ The included defaults point to the DGX Spark services:
 
 | Workload | Endpoint | Model |
 | --- | --- | --- |
-| DGX Spark status | `http://192.0.2.10:8330/v1/status` | Host, GPU, processes, and model health |
+| System status | `http://192.0.2.10:8330/v1/status` | Host, GPU, processes, and model health |
 | Multimodal chat and presets | `http://192.0.2.10:8331/v1` | `qwen36-35b-a3b-nvfp4` |
 | OCR | `http://192.0.2.10:8332/v1` | `Unlimited-OCR` |
 | Speech to text | `http://192.0.2.10:8333/v1` | `Qwen3-ASR-1.7B` |
@@ -14,7 +14,7 @@ The included defaults point to the DGX Spark services:
 | Grounding | `http://192.0.2.10:8335/v1` | `nvidia/LocateAnything-3B` |
 | Image generation | `http://192.0.2.10:8336/v1` | `Z-Image-Turbo` |
 
-Every service can be enabled, configured, and tested independently from **Settings → Model services**. OCR, Transcription, Translation, Grounding, Text to image, and Chat are executable modules.
+Every service can be enabled, configured, and tested independently from **Settings → Services**. The system-monitor URL is configured there as well; leaving it empty hides the machine-status block without affecting the AI-service indicators. OCR, Transcription, Translation, Grounding, Text to image, and Chat are executable modules.
 
 ## Run with Docker
 
