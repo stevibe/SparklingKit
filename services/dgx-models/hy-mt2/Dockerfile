@@ -13,10 +13,14 @@ RUN apt-get update \
 
 RUN PIP_CONSTRAINT= python3 -m pip install --no-cache-dir --upgrade \
     "transformers==5.5.3" \
+    "accelerate==1.14.0" \
+    "loguru==0.7.3" \
     "fastapi==0.124.4" \
     "uvicorn[standard]==0.38.0" \
     "python-multipart==0.0.20" \
-    "hf-xet>=1.1.0"
+    "hf-xet>=1.1.0" \
+    && PIP_CONSTRAINT= python3 -m pip install --no-cache-dir --no-deps \
+    "compressed-tensors==0.17.0"
 
 WORKDIR /app
 COPY server.py /app/server.py
