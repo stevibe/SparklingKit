@@ -846,6 +846,7 @@ body { background: radial-gradient(circle at 72% -15%, rgba(53, 82, 125, .16), t
 .job-icon-pdf { background: #351b1e; color: #ff9792; }
 .job-icon-text { background: #2c243a; color: #d4b7fa; }
 .job-icon-mindmap { background: #18302d; color: #8dd8cd; }
+.job-icon-workflow { background: #252a31; color: #dfe3e7; }
 .empty-card { border-color: #363c45; background: rgba(20, 23, 28, .72); }
 .skeleton { background: #20242a; }
 .error-card, .form-error, .chat-messages .bg-red-50 { border-color: #683238; background: #35191c; color: #ffaaa5; }
@@ -872,9 +873,8 @@ body { background: radial-gradient(circle at 72% -15%, rgba(53, 82, 125, .16), t
 .dashboard-column-heading h1, .dashboard-column-heading h2 { @apply font-display text-[24px] font-bold tracking-[-.03em]; }
 .workbench-grid { @apply grid min-w-0 items-stretch gap-0 lg:grid-cols-12; }
 .workbench-card { @apply flex min-w-0 flex-col rounded-none border-0 border-b border-[#292e35] bg-transparent p-6; box-shadow: none; }
-.workbench-file-card, .workbench-image-card, .workbench-translation-card, .workbench-side-stack { @apply lg:col-span-6; }
+.workbench-file-card, .workbench-image-card, .workbench-translation-card, .workbench-chat-card, .workbench-grounding-link { @apply lg:col-span-6; }
 .workbench-workflows-card { @apply lg:col-span-12; }
-.workbench-side-stack { @apply grid gap-0; }
 .workbench-card-heading { @apply flex items-center gap-3.5; }
 .workbench-card-heading strong { @apply min-w-0 font-display text-[20px] font-bold tracking-[-.025em]; }
 .workbench-card-icon { @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] border border-white/5 bg-[#292e35] text-[#e8eaed]; }
@@ -930,8 +930,8 @@ body { background: radial-gradient(circle at 72% -15%, rgba(53, 82, 125, .16), t
 .canvas-3-2 { width: 21px; height: 14px; }
 .canvas-2-3 { width: 14px; height: 21px; }
 .workbench-chat-card { @apply min-h-56; }
-.workbench-chat-composer { @apply relative mt-5 flex min-h-24 items-end rounded-[16px] border border-[#3a414a] bg-[#101216] p-2.5 transition focus-within:border-[#cbd0d6]; }
-.workbench-chat-composer textarea { @apply min-h-16 flex-1 resize-none bg-transparent px-2 py-1.5 text-[16px] leading-6 text-ink outline-none placeholder:text-[#737b86]; }
+.workbench-chat-composer { @apply relative mt-5 flex min-h-24 flex-1 items-end rounded-[16px] border border-[#3a414a] bg-[#101216] p-2.5 transition focus-within:border-[#cbd0d6]; }
+.workbench-chat-composer textarea { @apply min-h-16 flex-1 self-stretch resize-none bg-transparent px-2 py-1.5 text-[16px] leading-6 text-ink outline-none placeholder:text-[#737b86]; }
 .workbench-chat-composer .send-button { @apply h-9 w-9 shrink-0; }
 .workbench-grounding-link { @apply grid min-h-32 grid-cols-[minmax(0,1fr)_auto] items-center gap-3.5 text-ink transition hover:bg-[#181c20]; }
 .workbench-grounding-link .workbench-card-heading { @apply min-w-0; }
@@ -966,7 +966,7 @@ body { background: radial-gradient(circle at 72% -15%, rgba(53, 82, 125, .16), t
 .dashboard-recent .empty-card { @apply min-h-64 rounded-none border-0 bg-transparent; }
 
 @media (min-width: 768px) and (max-width: 1599px) {
-  .dashboard-recent .work-tabs { @apply grid-cols-7; }
+  .dashboard-recent .work-tabs { @apply grid-cols-8; }
 }
 
 @media (min-width: 1600px) {
@@ -983,8 +983,9 @@ body { background: radial-gradient(circle at 72% -15%, rgba(53, 82, 125, .16), t
   .workbench-workflow-list { @apply grid-cols-2; }
   .workbench-workflow-list > button:nth-child(odd) { @apply border-r pr-6; }
   .workbench-workflow-list > button:nth-child(even) { @apply pl-6; }
-  .workbench-image-card { @apply border-r; }
+  .workbench-image-card { @apply border-r border-b; }
   .workbench-chat-card { @apply border-b; }
+  .workbench-grounding-link:not(.workbench-mindmap-link) { @apply border-r; }
 }
 
 .job-titlebar { background: rgba(9, 10, 12, .94); }
@@ -1588,7 +1589,6 @@ body { background: radial-gradient(circle at 72% -15%, rgba(53, 82, 125, .16), t
   .workbench-translation-panes textarea + textarea { @apply border-t border-l-0; }
   .workbench-prompt { @apply min-h-36 text-[16px] leading-7; }
   .image-size-options button { @apply flex-col items-start px-2.5; }
-  .workbench-side-stack { @apply gap-0; }
   .workbench-chat-card { @apply min-h-0; }
   .workbench-chat-composer textarea { @apply text-[16px]; }
   .workbench-grounding-link { @apply min-h-28 grid-cols-[minmax(0,1fr)_auto]; }

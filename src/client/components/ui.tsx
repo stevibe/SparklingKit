@@ -1,14 +1,14 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { Check, CheckCircle2, Clock3, FileImage, FileText, LoaderCircle, Mic2, Network, Pencil, Trash2, TriangleAlert, XCircle } from "lucide-react";
+import { Check, CheckCircle2, Clock3, FileImage, FileText, GitBranch, LoaderCircle, Mic2, Network, Pencil, Trash2, TriangleAlert, XCircle } from "lucide-react";
 import type { Job, JobKind, JobStatus, ModuleId } from "../types";
 
 export function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)); }
 
-export function JobIcon({ type, moduleId, className }: { type: JobKind; moduleId?: ModuleId; className?: string }) {
-  const Icon = moduleId === "mindmap" ? Network : type === "audio" ? Mic2 : type === "image" || type === "text" ? FileImage : FileText;
-  return <span className={cn("job-icon", `job-icon-${moduleId === "mindmap" ? "mindmap" : type}`, className)}><Icon size={20} strokeWidth={1.8} /></span>;
+export function JobIcon({ type, moduleId, workflow = false, className }: { type: JobKind; moduleId?: ModuleId; workflow?: boolean; className?: string }) {
+  const Icon = workflow ? GitBranch : moduleId === "mindmap" ? Network : type === "audio" ? Mic2 : type === "image" || type === "text" ? FileImage : FileText;
+  return <span className={cn("job-icon", `job-icon-${workflow ? "workflow" : moduleId === "mindmap" ? "mindmap" : type}`, className)}><Icon size={20} strokeWidth={1.8} /></span>;
 }
 
 export function StatusBadge({ status }: { status: JobStatus }) {

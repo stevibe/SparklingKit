@@ -19,17 +19,18 @@ const workflowCopy: Record<JobKind, { label: string; description: string }> = {
 };
 
 type FileAction = "ocr" | "transcription" | "translation";
-type JobFilter = "all" | "audio" | "ocr" | "translation" | "grounding" | "generated" | "mindmap";
+type JobFilter = "all" | "audio" | "ocr" | "translation" | "grounding" | "generated" | "mindmap" | "workflow";
 type FileLike = Pick<File, "name" | "type">;
 
 const recentTabs: Array<{ key: JobFilter; label: string; shortLabel: string; icon: ReactNode }> = [
   { key: "all", label: "All files", shortLabel: "All", icon: <FileText size={16} /> },
-  { key: "audio", label: "Transcriptions", shortLabel: "Audio", icon: <AudioLines size={16} /> },
   { key: "ocr", label: "OCR documents", shortLabel: "OCR", icon: <ScanText size={16} /> },
+  { key: "audio", label: "Transcriptions", shortLabel: "Audio", icon: <AudioLines size={16} /> },
   { key: "translation", label: "Translations", shortLabel: "Translate", icon: <Languages size={16} /> },
   { key: "grounding", label: "Located regions", shortLabel: "Find", icon: <ScanSearch size={16} /> },
   { key: "generated", label: "Generated images", shortLabel: "Images", icon: <ImageIcon size={16} /> },
   { key: "mindmap", label: "Mind maps", shortLabel: "Maps", icon: <Network size={16} /> },
+  { key: "workflow", label: "Workflow runs", shortLabel: "Flows", icon: <GitBranch size={16} /> },
 ];
 
 const fileActions: Array<{ id: FileAction; label: string; hint: string; icon: ReactNode }> = [
@@ -181,7 +182,13 @@ export function Dashboard() {
     disabled: uploading,
   });
 
-  const visibleJobs = jobs.filter((job) => filter === "all" || job.moduleId === ({ audio: "transcription", ocr: "ocr", translation: "translation", grounding: "grounding", generated: "text-to-image", mindmap: "mindmap" } as const)[filter]);
+  const visibleJobs = jobs.filter((job) => {
+    if (filter === "all") return true;
+    const workflowJob = job.workflowId.startsWith("flow:");
+    if (filter === "workflow") return workflowJob;
+    if (workflowJob) return false;
+    return job.moduleId === ({ audio: "transcription", ocr: "ocr", translation: "translation", grounding: "grounding", generated: "text-to-image", mindmap: "mindmap" } as const)[filter];
+  });
   const enabledWorkflows = workflows.filter((workflow) => workflow.enabled);
 
   async function submitFile() {
@@ -330,15 +337,14 @@ export function Dashboard() {
         <div className="workbench-card-footer"><button className="button-primary" onClick={() => void createImage()} disabled={generating || !imagePrompt.trim() || !configured("text-to-image")}>{generating ? <><span className="spinner dark" />Starting</> : <>Generate<ArrowRight size={17} /></>}</button></div>
       </section>
 
-      <div className="workbench-side-stack">
-        <section className="workbench-card workbench-chat-card">
-          <WorkbenchHeading icon={<MessageCircle size={22} />} title="Ask your model" />
-          <form className="workbench-chat-composer" onSubmit={startChat}><textarea value={chatPrompt} onChange={(event) => setChatPrompt(event.target.value)} placeholder="What are you working on?" rows={2} /><button className="send-button" disabled={startingChat || !chatPrompt.trim() || !configured("chat")} aria-label="Start conversation"><ArrowRight size={18} /></button></form>
-          {chatError && <p className="form-error">{chatError}</p>}
-        </section>
-        <Link to="/tools/grounding" className="workbench-card workbench-grounding-link"><WorkbenchHeading icon={<ScanSearch size={22} />} title="Find something in an image" /><ArrowRight size={19} /></Link>
-        <Link to="/tools/mindmap" className="workbench-card workbench-grounding-link workbench-mindmap-link"><WorkbenchHeading icon={<Network size={22} />} title="Build an interactive mind map" /><ArrowRight size={19} /></Link>
-      </div>
+      <section className="workbench-card workbench-chat-card">
+        <WorkbenchHeading icon={<MessageCircle size={22} />} title="Ask your model" />
+        <form className="workbench-chat-composer" onSubmit={startChat}><textarea value={chatPrompt} onChange={(event) => setChatPrompt(event.target.value)} placeholder="What are you working on?" rows={2} /><button className="send-button" disabled={startingChat || !chatPrompt.trim() || !configured("chat")} aria-label="Start conversation"><ArrowRight size={18} /></button></form>
+        {chatError && <p className="form-error">{chatError}</p>}
+      </section>
+
+      <Link to="/tools/grounding" className="workbench-card workbench-grounding-link"><WorkbenchHeading icon={<ScanSearch size={22} />} title="Find something in an image" /><ArrowRight size={19} /></Link>
+      <Link to="/tools/mindmap" className="workbench-card workbench-grounding-link workbench-mindmap-link"><WorkbenchHeading icon={<Network size={22} />} title="Build an interactive mind map" /><ArrowRight size={19} /></Link>
     </div>
     </section>
 
@@ -366,6 +372,7 @@ function CompactLanguageSelect({ label, value, allowAuto = false, onChange }: { 
 
 function JobRow({ job, onDelete, compact = false }: { job: Job; onDelete: () => void; compact?: boolean }) {
   const running = ["queued", "preparing", "processing", "merging"].includes(job.status);
-  const label = job.moduleId === "grounding" ? "Grounding" : job.moduleId === "translation" ? "Translation" : job.moduleId === "mindmap" ? "Mind map" : workflowCopy[job.type].label;
-  return <div className={cn("job-row-shell", compact && "compact")}><Link to={`/jobs/${job.id}`} className="job-row group"><JobIcon type={job.type} moduleId={job.moduleId} /><div className="job-row-main"><div><p>{job.title}</p>{(!compact || job.status !== "done") && <StatusBadge status={job.status} />}</div><small>{label}<i />{!compact && <>{job.stage}<i /></>}{timeAgo(job.createdAt)}</small>{running && <Progress job={job} />}</div><ArrowRight size={19} className="job-row-arrow" /></Link><button className="row-delete-button" onClick={onDelete} aria-label={`Delete ${job.title}`} title="Delete job"><Trash2 size={15} /></button></div>;
+  const workflowJob = job.workflowId.startsWith("flow:");
+  const label = workflowJob ? "Workflow" : job.moduleId === "grounding" ? "Grounding" : job.moduleId === "translation" ? "Translation" : job.moduleId === "mindmap" ? "Mind map" : workflowCopy[job.type].label;
+  return <div className={cn("job-row-shell", compact && "compact")}><Link to={`/jobs/${job.id}`} className="job-row group"><JobIcon type={job.type} moduleId={job.moduleId} workflow={workflowJob} /><div className="job-row-main"><div><p>{job.title}</p>{(!compact || job.status !== "done") && <StatusBadge status={job.status} />}</div><small>{label}<i />{!compact && <>{job.stage}<i /></>}{timeAgo(job.createdAt)}</small>{running && <Progress job={job} />}</div><ArrowRight size={19} className="job-row-arrow" /></Link><button className="row-delete-button" onClick={onDelete} aria-label={`Delete ${job.title}`} title="Delete job"><Trash2 size={15} /></button></div>;
 }
