@@ -45,6 +45,7 @@ export const api = {
   previewTranslation: (text: string, sourceLanguage: string, targetLanguage: string, signal?: AbortSignal) => request<{ text: string }>("/api/modules/translation/preview", { method: "POST", body: JSON.stringify({ text, sourceLanguage, targetLanguage }), signal }),
   createTextTranslationJob: (text: string, sourceLanguage: string, targetLanguage: string) => request<Job>("/api/modules/translation/text", { method: "POST", body: JSON.stringify({ text, sourceLanguage, targetLanguage }) }),
   createImageJob: (prompt: string, size: string) => request<Job>("/api/modules/text-to-image/jobs", { method: "POST", body: JSON.stringify({ prompt, size }) }),
+  createMindMapJob: (subject: string, options: { instructions?: string; depth: number; breadth: number }) => request<Job>("/api/modules/mindmap/jobs", { method: "POST", body: JSON.stringify({ subject, ...options }) }),
   jobs: () => request<{ jobs: Job[]; total: number }>("/api/jobs"),
   job: (id: string) => request<Job>(`/api/jobs/${id}`),
   startRun: (id: string, input: { moduleId: ModuleId; workflowId: string; inputArtifactIds: string[]; params: Record<string, unknown> }) => request<{ job: Job; run: WorkflowRun }>(`/api/jobs/${id}/runs`, { method: "POST", body: JSON.stringify(input) }),

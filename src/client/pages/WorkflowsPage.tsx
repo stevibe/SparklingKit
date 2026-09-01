@@ -30,6 +30,7 @@ import {
   Languages,
   Merge,
   MessageCircle,
+  Network,
   Play,
   Plus,
   Save,
@@ -71,6 +72,7 @@ const serviceIcons: Record<WorkflowServiceId, typeof ScanText> = {
   translation: Languages,
   grounding: ScanSearch,
   "text-to-image": ImageIcon,
+  mindmap: Network,
   "llm-prompt": Bot,
   chat: MessageCircle,
 };
@@ -253,7 +255,8 @@ export function WorkflowEditorPage() {
       const params = serviceId === "translation" ? { sourceLanguage: "auto-detect", targetLanguage: "Traditional Chinese" }
         : serviceId === "grounding" ? { queries: ["object to find"] }
           : serviceId === "text-to-image" ? { prompt: "", size: "1024x1024" }
-            : serviceId === "llm-prompt" ? { prompt: "Summarize the supplied material into clear Markdown.", temperature: 0.2, maxTokens: 8192 }
+            : serviceId === "mindmap" ? { instructions: "", depth: 4, breadth: 5 }
+              : serviceId === "llm-prompt" ? { prompt: "Summarize the supplied material into clear Markdown.", temperature: 0.2, maxTokens: 8192 }
               : {};
       return { moduleId: serviceId, workflowId: serviceId === "llm-prompt" ? "llm.prompt" : "auto", params, storeResult: true };
     }
@@ -382,8 +385,9 @@ function NodeInspector({ node, definition, onChange, onDelete, onDeleteWorkflow 
       {serviceId === "translation" && <><label>Source language<input className="input" value={String(params.sourceLanguage || "auto-detect")} onChange={(event) => updateParams({ sourceLanguage: event.target.value })} /></label><label>Target language<input className="input" value={String(params.targetLanguage || "")} onChange={(event) => updateParams({ targetLanguage: event.target.value })} /></label></>}
       {serviceId === "grounding" && <label>Queries<textarea className="input" rows={6} value={Array.isArray(params.queries) ? params.queries.join("\n") : ""} onChange={(event) => updateParams({ queries: event.target.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean).slice(0, 12) })} placeholder="One thing per line" /></label>}
       {serviceId === "text-to-image" && <><label>Prompt<textarea className="input" rows={5} value={String(params.prompt || "")} onChange={(event) => updateParams({ prompt: event.target.value })} placeholder="Leave blank to use incoming text" /></label><label>Canvas<SearchSelect className="workflow-inspector-select" value={String(params.size || "1024x1024")} onChange={(size) => updateParams({ size })} options={[{ value: "1024x1024", label: "Square" }, { value: "1536x1024", label: "Landscape" }, { value: "1024x1536", label: "Portrait" }]} searchPlaceholder="Search canvas sizes" ariaLabel="Canvas size" /></label></>}
+      {serviceId === "mindmap" && <><label>Focus<textarea className="input" rows={5} value={String(params.instructions || "")} onChange={(event) => updateParams({ instructions: event.target.value })} placeholder="Optional guidance for organizing the map" /></label><label>Levels<SearchSelect className="workflow-inspector-select" value={String(params.depth || 4)} onChange={(depth) => updateParams({ depth: Number(depth) })} options={[3, 4, 5, 6].map((value) => ({ value: String(value), label: `${value} levels` }))} searchPlaceholder="Search depth" ariaLabel="Mind map levels" /></label><label>Branches<SearchSelect className="workflow-inspector-select" value={String(params.breadth || 5)} onChange={(breadth) => updateParams({ breadth: Number(breadth) })} options={[3, 5, 7].map((value) => ({ value: String(value), label: `Up to ${value} per node` }))} searchPlaceholder="Search breadth" ariaLabel="Mind map branches" /></label></>}
       {serviceId === "llm-prompt" && <><label>Instruction<textarea className="input" rows={6} value={String(params.prompt || "")} onChange={(event) => updateParams({ prompt: event.target.value })} /></label><label>System instruction<textarea className="input" rows={4} value={String(params.systemPrompt || "")} onChange={(event) => updateParams({ systemPrompt: event.target.value })} placeholder="Optional" /></label><label>Temperature<input className="input" type="number" min={0} max={2} step={0.1} value={Number(params.temperature ?? 0.2)} onChange={(event) => updateParams({ temperature: Number(event.target.value) })} /></label></>}
-      {!["translation", "grounding", "text-to-image", "llm-prompt"].includes(serviceId || "") && <p className="workflow-inspector-note">This node uses the service defaults from Settings.</p>}
+      {!["translation", "grounding", "text-to-image", "mindmap", "llm-prompt"].includes(serviceId || "") && <p className="workflow-inspector-note">This node uses the service defaults from Settings.</p>}
     </InspectorSection>}
     {node.type === "module" && serviceId !== "chat" && <InspectorSection title="Result">
       <label className="workflow-check-row"><input type="checkbox" checked={config.storeResult !== false} onChange={(event) => updateConfig({ storeResult: event.target.checked })} />Store the result</label>

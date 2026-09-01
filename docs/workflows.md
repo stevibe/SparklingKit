@@ -152,6 +152,7 @@ Service nodes use the current module contracts and provider settings:
 | Translation | Text-based artifacts | Translation | Language parameters belong to the node. |
 | Grounding | Images | Grounded image and annotations | Queries belong to the node. |
 | Text to image | Text-based artifacts or a prompt parameter | Generated image | Canvas options belong to the node. |
+| Mind map | Text, structured data, and optionally images | Interactive mind map and Markdown outline | Depth, breadth, and optional focus belong to the node. |
 | LLM prompt | Text, structured data, and optionally images | Text or document | Image input is enabled only when the configured LLM declares vision support. |
 | Create chat | Router-compatible references | Linked conversation | A terminal handoff because a human conversation is interactive. |
 

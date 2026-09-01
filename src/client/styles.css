@@ -845,6 +845,7 @@ body { background: radial-gradient(circle at 72% -15%, rgba(53, 82, 125, .16), t
 .job-icon-image { background: #302711; color: #f2c661; }
 .job-icon-pdf { background: #351b1e; color: #ff9792; }
 .job-icon-text { background: #2c243a; color: #d4b7fa; }
+.job-icon-mindmap { background: #18302d; color: #8dd8cd; }
 .empty-card { border-color: #363c45; background: rgba(20, 23, 28, .72); }
 .skeleton { background: #20242a; }
 .error-card, .form-error, .chat-messages .bg-red-50 { border-color: #683238; background: #35191c; color: #ffaaa5; }
@@ -882,6 +883,7 @@ body { background: radial-gradient(circle at 72% -15%, rgba(53, 82, 125, .16), t
 .workbench-image-card .workbench-card-icon { @apply bg-[#2c243a] text-[#d4b7fa]; }
 .workbench-chat-card .workbench-card-icon { @apply bg-[#202a35] text-[#c5d9f0]; }
 .workbench-grounding-link .workbench-card-icon { @apply bg-[#1d302c] text-[#9ed8ca]; }
+.workbench-mindmap-link .workbench-card-icon { @apply bg-[#202b2b] text-[#9bd4cd]; }
 .workbench-file-drop { @apply mt-5 flex min-h-24 flex-1 cursor-pointer items-center gap-3.5 rounded-[16px] border border-dashed border-[#46505b] bg-[#101318] p-4 transition hover:border-[#737d89] hover:bg-[#13171c]; }
 .workbench-file-drop.active { @apply border-[#d9dde2] bg-[#1b1f24]; }
 .workbench-file-drop.has-files { @apply cursor-default border-solid; }
@@ -964,7 +966,7 @@ body { background: radial-gradient(circle at 72% -15%, rgba(53, 82, 125, .16), t
 .dashboard-recent .empty-card { @apply min-h-64 rounded-none border-0 bg-transparent; }
 
 @media (min-width: 768px) and (max-width: 1599px) {
-  .dashboard-recent .work-tabs { @apply grid-cols-6; }
+  .dashboard-recent .work-tabs { @apply grid-cols-7; }
 }
 
 @media (min-width: 1600px) {
@@ -1294,6 +1296,7 @@ body { background: radial-gradient(circle at 72% -15%, rgba(53, 82, 125, .16), t
 .module-card-icon-translation { background: #282238; color: #d2b6f5; }
 .module-card-icon-grounding { background: #1d302c; color: #9ed8ca; }
 .module-card-icon-text-to-image { background: #2c243a; color: #d4b7fa; }
+.module-card-icon-mindmap { background: #202b2b; color: #9bd4cd; }
 .module-card-icon-chat { background: #292e35; color: #e8eaed; }
 .module-card-copy { @apply min-w-0 flex-1 text-[14px] leading-5 text-muted; }
 .module-card-title { @apply mb-1 flex items-center gap-2; }
@@ -1358,6 +1361,38 @@ body { background: radial-gradient(circle at 72% -15%, rgba(53, 82, 125, .16), t
 .grounding-dropzone-copy strong { @apply text-[14px] font-bold text-ink; }
 .grounding-dropzone-copy small { @apply mt-1 text-[14px] font-medium text-muted; }
 .grounding-query-input { @apply min-h-36 text-[16px] leading-7; }
+.mindmap-source-input { @apply min-h-48 text-[16px] leading-7; }
+.mindmap-options { @apply mt-5 grid gap-4 sm:grid-cols-2; }
+.mindmap-options .field-label { @apply block; }
+.file-type-mindmap { background: #18302d; color: #8dd8cd; }
+
+/* Interactive mind maps */
+.mindmap-viewer { @apply mx-auto flex min-h-[680px] w-full max-w-[1500px] flex-col overflow-hidden rounded-[14px] border border-[#303640] bg-[#101216]; box-shadow: 0 5px 18px rgba(0,0,0,.3); }
+.mindmap-viewer > header { @apply flex min-h-18 shrink-0 items-center justify-between gap-4 border-b border-[#303640] bg-[#15181d] px-5 py-3; }
+.mindmap-viewer > header > div { @apply flex min-w-0 items-center gap-3; }
+.mindmap-viewer > header > div > span:last-child { @apply min-w-0; }
+.mindmap-viewer > header strong, .mindmap-viewer > header small { @apply block truncate; }
+.mindmap-viewer > header strong { @apply font-display text-[17px] font-bold; }
+.mindmap-viewer > header small { @apply mt-0.5 text-[13px] text-muted; }
+.mindmap-viewer > header > button { @apply inline-flex min-h-9 shrink-0 items-center gap-2 rounded-full border border-[#3a414a] px-3.5 text-[13px] font-bold text-[#cbd0d6] transition hover:bg-[#252a31] hover:text-white; }
+.mindmap-viewer-icon { @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] bg-[#18302d] text-[#8dd8cd]; }
+.mindmap-canvas { @apply relative min-h-0 flex-1; }
+.mindmap-canvas > .react-flow { @apply h-full min-h-[610px]; }
+.mindmap-canvas .react-flow__controls { @apply overflow-hidden rounded-[11px] border border-[#343a43] bg-[#171a1f]; box-shadow: 0 6px 20px rgba(0,0,0,.35); }
+.mindmap-canvas .react-flow__controls-button { @apply border-[#343a43] bg-[#171a1f] fill-[#d5d9de] text-[#d5d9de] hover:bg-[#252a31]; }
+.mindmap-canvas-hint { @apply pointer-events-none absolute right-4 bottom-3 rounded-full bg-[#0b0d10]/85 px-3 py-1.5 text-[11px] font-semibold text-muted; }
+.mindmap-node { @apply flex min-h-[74px] w-[250px] items-center gap-3 rounded-[16px] border border-[#3a424c] bg-[#191d22] p-3 text-ink; box-shadow: 0 8px 24px rgba(0,0,0,.34), inset 0 1px rgba(255,255,255,.035); }
+.mindmap-node.root { @apply w-[270px] border-[#4f8278] bg-[#172522]; box-shadow: 0 10px 28px rgba(0,0,0,.38), inset 0 0 0 1px rgba(119,200,180,.08); }
+.mindmap-node-icon { @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-[#252b31] text-[#aab2bc]; }
+.mindmap-node.root .mindmap-node-icon { @apply bg-[#1d3a34] text-[#86d4c1]; }
+.mindmap-node-copy { @apply min-w-0 flex-1; }
+.mindmap-node-copy strong, .mindmap-node-copy small { @apply block; }
+.mindmap-node-copy strong { @apply text-[14px] leading-5 font-bold; }
+.mindmap-node-copy small { @apply mt-1 line-clamp-2 text-[12px] leading-4 text-muted; }
+.mindmap-node > button { @apply flex h-8 shrink-0 items-center gap-0.5 rounded-[9px] px-1.5 text-muted transition hover:bg-[#2a3037] hover:text-white; }
+.mindmap-node > button i { @apply min-w-4 text-center text-[10px] font-bold not-italic; }
+.mindmap-node .react-flow__handle { @apply h-2.5 w-2.5 border-2 border-[#101216] bg-[#7d8793]; }
+.mindmap-node.root .react-flow__handle { @apply bg-[#77c8b4]; }
 .grounding-query-help { @apply mt-2 block text-[14px] font-medium text-muted; }
 .image-prompt-input { @apply min-h-40 text-[16px] leading-7; }
 .generated-image-preview { @apply flex min-h-[580px] items-center justify-center rounded-[14px] bg-[#0c0e11] p-4 sm:p-7; }
@@ -1517,6 +1552,16 @@ body { background: radial-gradient(circle at 72% -15%, rgba(53, 82, 125, .16), t
   .module-form-actions .button-primary { @apply min-h-12 w-full; }
   .generated-image-preview { @apply min-h-[360px] p-2; }
   .generated-image-preview img { max-height: calc(100dvh - 240px); }
+  .mindmap-viewer { @apply min-h-[540px] rounded-[12px]; }
+  .mindmap-viewer > header { @apply items-start px-3.5; }
+  .mindmap-viewer > header small { @apply whitespace-normal; }
+  .mindmap-viewer > header > button { @apply h-10 w-10 gap-0 self-center rounded-[11px] px-0; }
+  .mindmap-viewer > header > button svg { @apply m-auto; }
+  .mindmap-viewer > header > button { font-size: 0; }
+  .mindmap-canvas > .react-flow { @apply min-h-[470px]; }
+  .mindmap-canvas-hint { @apply hidden; }
+  .mindmap-node { @apply w-[220px]; }
+  .mindmap-node.root { @apply w-[235px]; }
 
   .dashboard-column-heading { @apply h-18 px-4; }
   .dashboard-column-heading h1, .dashboard-column-heading h2 { @apply text-[22px]; }

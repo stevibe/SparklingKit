@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useDropzone } from "react-dropzone";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeftRight, ArrowRight, AudioLines, CloudUpload, FileText, FolderOpen, GitBranch, Image as ImageIcon, Languages, MessageCircle, Play, Save, ScanSearch, ScanText, Search, Trash2, X } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, AudioLines, CloudUpload, FileText, FolderOpen, GitBranch, Image as ImageIcon, Languages, MessageCircle, Network, Play, Save, ScanSearch, ScanText, Search, Trash2, X } from "lucide-react";
 import { api, uploadJob, uploadTranslationJob } from "../api";
 import { cn, ConfirmDialog, formatBytes, JobIcon, Progress, StatusBadge, timeAgo } from "../components/ui";
 import { savedTranslationPreferences, translationLanguages, translationPreferenceKey, type TranslationPreferences } from "../translation";
@@ -19,7 +19,7 @@ const workflowCopy: Record<JobKind, { label: string; description: string }> = {
 };
 
 type FileAction = "ocr" | "transcription" | "translation";
-type JobFilter = "all" | "audio" | "ocr" | "translation" | "grounding" | "generated";
+type JobFilter = "all" | "audio" | "ocr" | "translation" | "grounding" | "generated" | "mindmap";
 type FileLike = Pick<File, "name" | "type">;
 
 const recentTabs: Array<{ key: JobFilter; label: string; shortLabel: string; icon: ReactNode }> = [
@@ -29,6 +29,7 @@ const recentTabs: Array<{ key: JobFilter; label: string; shortLabel: string; ico
   { key: "translation", label: "Translations", shortLabel: "Translate", icon: <Languages size={16} /> },
   { key: "grounding", label: "Located regions", shortLabel: "Find", icon: <ScanSearch size={16} /> },
   { key: "generated", label: "Generated images", shortLabel: "Images", icon: <ImageIcon size={16} /> },
+  { key: "mindmap", label: "Mind maps", shortLabel: "Maps", icon: <Network size={16} /> },
 ];
 
 const fileActions: Array<{ id: FileAction; label: string; hint: string; icon: ReactNode }> = [
@@ -180,7 +181,7 @@ export function Dashboard() {
     disabled: uploading,
   });
 
-  const visibleJobs = jobs.filter((job) => filter === "all" || job.moduleId === ({ audio: "transcription", ocr: "ocr", translation: "translation", grounding: "grounding", generated: "text-to-image" } as const)[filter]);
+  const visibleJobs = jobs.filter((job) => filter === "all" || job.moduleId === ({ audio: "transcription", ocr: "ocr", translation: "translation", grounding: "grounding", generated: "text-to-image", mindmap: "mindmap" } as const)[filter]);
   const enabledWorkflows = workflows.filter((workflow) => workflow.enabled);
 
   async function submitFile() {
@@ -336,6 +337,7 @@ export function Dashboard() {
           {chatError && <p className="form-error">{chatError}</p>}
         </section>
         <Link to="/tools/grounding" className="workbench-card workbench-grounding-link"><WorkbenchHeading icon={<ScanSearch size={22} />} title="Find something in an image" /><ArrowRight size={19} /></Link>
+        <Link to="/tools/mindmap" className="workbench-card workbench-grounding-link workbench-mindmap-link"><WorkbenchHeading icon={<Network size={22} />} title="Build an interactive mind map" /><ArrowRight size={19} /></Link>
       </div>
     </div>
     </section>
@@ -364,6 +366,6 @@ function CompactLanguageSelect({ label, value, allowAuto = false, onChange }: { 
 
 function JobRow({ job, onDelete, compact = false }: { job: Job; onDelete: () => void; compact?: boolean }) {
   const running = ["queued", "preparing", "processing", "merging"].includes(job.status);
-  const label = job.moduleId === "grounding" ? "Grounding" : job.moduleId === "translation" ? "Translation" : workflowCopy[job.type].label;
-  return <div className={cn("job-row-shell", compact && "compact")}><Link to={`/jobs/${job.id}`} className="job-row group"><JobIcon type={job.type} /><div className="job-row-main"><div><p>{job.title}</p>{(!compact || job.status !== "done") && <StatusBadge status={job.status} />}</div><small>{label}<i />{!compact && <>{job.stage}<i /></>}{timeAgo(job.createdAt)}</small>{running && <Progress job={job} />}</div><ArrowRight size={19} className="job-row-arrow" /></Link><button className="row-delete-button" onClick={onDelete} aria-label={`Delete ${job.title}`} title="Delete job"><Trash2 size={15} /></button></div>;
+  const label = job.moduleId === "grounding" ? "Grounding" : job.moduleId === "translation" ? "Translation" : job.moduleId === "mindmap" ? "Mind map" : workflowCopy[job.type].label;
+  return <div className={cn("job-row-shell", compact && "compact")}><Link to={`/jobs/${job.id}`} className="job-row group"><JobIcon type={job.type} moduleId={job.moduleId} /><div className="job-row-main"><div><p>{job.title}</p>{(!compact || job.status !== "done") && <StatusBadge status={job.status} />}</div><small>{label}<i />{!compact && <>{job.stage}<i /></>}{timeAgo(job.createdAt)}</small>{running && <Progress job={job} />}</div><ArrowRight size={19} className="job-row-arrow" /></Link><button className="row-delete-button" onClick={onDelete} aria-label={`Delete ${job.title}`} title="Delete job"><Trash2 size={15} /></button></div>;
 }

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Background, Controls, Handle, MarkerType, Position, ReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
-import { ArrowLeft, ArrowRight, AudioLines, Bot, Braces, Check, ChevronDown, CircleStop, Code2, Combine, Copy, Download, ExternalLink, File, FileAudio, FileInput, FileJson, FileText, FileVideo, FolderOpen, GitBranch, Image as ImageIcon, Languages, LoaderCircle, MessageCircle, PanelLeft, Pencil, Save, ScanSearch, ScanText, Split, Square, Subtitles, Trash2, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ArrowRight, AudioLines, Bot, Braces, Check, ChevronDown, CircleStop, Code2, Combine, Copy, Download, ExternalLink, File, FileAudio, FileInput, FileJson, FileText, FileVideo, FolderOpen, GitBranch, Image as ImageIcon, Languages, LoaderCircle, MessageCircle, Network, PanelLeft, Pencil, Save, ScanSearch, ScanText, Split, Square, Subtitles, Trash2, TriangleAlert } from "lucide-react";
 import { api, startWorkflow } from "../api";
 import { writeClipboardText } from "../clipboard";
 import { ConfirmDialog, JobIcon, Progress, RenameDialog, StatusBadge, cn, formatBytes, timeAgo } from "../components/ui";
 import { SearchSelect } from "../components/SearchSelect";
 import { MarkdownRenderer } from "../components/MarkdownRenderer";
+import { MindMapViewer, parseMindMap } from "../components/MindMapViewer";
 import { useToast } from "../components/ToastProvider";
 import { compatibleModuleContracts, moduleHandoffUrl } from "../../shared/module-router";
 import { nodeTitle, workflowAcceptsArtifact } from "../../shared/workflows";
@@ -143,7 +144,7 @@ export function JobPage() {
   const compatibleWorkflows = selectedArtifact ? workflows.filter((workflow) => workflow.enabled && workflowAcceptsArtifact(workflow, selectedArtifact.kind)) : [];
   const workflowLabel = flowRun?.definition.name || modules.find((module) => module.id === job.moduleId)?.title || (job.type === "audio" ? "Transcription" : "OCR");
   const html = extractHtml(preview, selectedFile);
-  const canRender = selectedKind === "markdown" || Boolean(html);
+  const canRender = selectedKind === "markdown" || Boolean(html) || selectedFile === "mindmap.json" || selectedFile.endsWith(".mindmap.json");
   const canCopy = ["markdown", "json", "subtitle", "html", "text"].includes(selectedKind);
   const selectedUrl = selectedScope === "input" ? inputFileUrl(job.id, selectedFile) : fileUrl(job.id, selectedFile);
   const selectedDisplayName = selectedScope === "input" ? selectedInput?.name || selectedFile : displayOutputName(selectedFile);
@@ -284,7 +285,7 @@ export function JobPage() {
 
   return <div className="job-page">
     <header className="job-titlebar">
-      <div className="job-title-left"><Link to="/" className="icon-button" aria-label="Back to workbench"><ArrowLeft size={19} /></Link><JobIcon type={job.type} className="job-title-icon h-11 w-11" /><div className="min-w-0 flex-1"><div className="job-title-line"><h1>{job.title}</h1><button className="inline-rename-button" onClick={() => askToRename({ kind: "job", value: job.title })} aria-label="Rename job" title="Rename job"><Pencil size={14} /></button></div><div className="job-meta"><StatusBadge status={job.status} /><span>{formatBytes(job.inputs.reduce((sum, input) => sum + input.size, 0))}</span><i /><span>{timeAgo(job.createdAt)}</span></div></div><button className="icon-button destructive-icon-button job-delete-mobile" onClick={() => askToDelete({ kind: "job", label: job.title })} aria-label="Delete job" title="Delete job"><Trash2 size={17} /></button></div>
+      <div className="job-title-left"><Link to="/" className="icon-button" aria-label="Back to workbench"><ArrowLeft size={19} /></Link><JobIcon type={job.type} moduleId={job.moduleId} className="job-title-icon h-11 w-11" /><div className="min-w-0 flex-1"><div className="job-title-line"><h1>{job.title}</h1><button className="inline-rename-button" onClick={() => askToRename({ kind: "job", value: job.title })} aria-label="Rename job" title="Rename job"><Pencil size={14} /></button></div><div className="job-meta"><StatusBadge status={job.status} /><span>{formatBytes(job.inputs.reduce((sum, input) => sum + input.size, 0))}</span><i /><span>{timeAgo(job.createdAt)}</span></div></div><button className="icon-button destructive-icon-button job-delete-mobile" onClick={() => askToDelete({ kind: "job", label: job.title })} aria-label="Delete job" title="Delete job"><Trash2 size={17} /></button></div>
       <div className="job-actions">{running ? <button className="button-secondary stop-job-button" onClick={stopJob} disabled={stopping}>{stopping ? <LoaderCircle size={15} className="animate-spin" /> : <Square size={15} fill="currentColor" />}{stopping ? "Stopping…" : "Stop job"}</button> : complete ? <><SearchSelect className="preset-search-select" value="" options={prompts.map((prompt) => ({ value: prompt.slug, label: prompt.name }))} onChange={(slug) => void runPreset(slug)} placeholder="Run a preset" searchPlaceholder="Search presets" emptyMessage="No presets found" ariaLabel="Run a preset" leadingIcon={<Braces size={17} />} disabled={!prompts.length} /><button className="button-secondary" onClick={openChat} disabled={openingChat}>{openingChat ? <LoaderCircle size={17} className="animate-spin" /> : <MessageCircle size={17} />}{openingChat ? "Opening…" : "Ask in chat"}</button></> : null}<button className="icon-button destructive-icon-button job-delete-desktop" onClick={() => askToDelete({ kind: "job", label: job.title })} aria-label="Delete job" title="Delete job"><Trash2 size={17} /></button></div>
     </header>
 
@@ -331,7 +332,7 @@ export function linkedChatsForJob(chats: Chat[], jobId: string) {
 }
 
 function FlowActionIcon({ moduleId }: { moduleId: ModuleId }) {
-  const Icon = moduleId === "translation" ? Languages : moduleId === "grounding" ? ScanSearch : moduleId === "ocr" ? ScanText : moduleId === "text-to-image" ? ImageIcon : MessageCircle;
+  const Icon = moduleId === "translation" ? Languages : moduleId === "grounding" ? ScanSearch : moduleId === "ocr" ? ScanText : moduleId === "text-to-image" ? ImageIcon : moduleId === "mindmap" ? Network : MessageCircle;
   return <Icon size={17} />;
 }
 
@@ -343,6 +344,7 @@ const workflowServiceIcons: Record<WorkflowServiceId, typeof ScanText> = {
   translation: Languages,
   grounding: ScanSearch,
   "text-to-image": ImageIcon,
+  mindmap: Network,
   "llm-prompt": Bot,
   chat: MessageCircle,
 };
@@ -438,7 +440,7 @@ function WorkflowRunGraph({ flowRun }: { flowRun: FlowRun }) {
 }
 
 function ProcessingView({ job, flowRun }: { job: Job; flowRun?: FlowRun }) {
-  if (!flowRun) return <div className="processing-view"><span className="processing-icon"><JobIcon type={job.type} /></span><p className="eyebrow">PROCESSING JOB</p><h2>{job.stage}</h2><p>{job.detail || "Work continues in the background. You can safely leave this page."}</p><div className="processing-progress"><Progress job={job} /><span>{job.progress}%</span></div><div className="processing-steps"><span className="done">Uploaded</span><span className={job.progress > 8 ? "done" : "active"}>Prepared</span><span className={job.progress > 90 ? "done" : "active"}>Processed</span><span className={job.progress === 100 ? "done" : ""}>Complete</span></div></div>;
+  if (!flowRun) return <div className="processing-view"><span className="processing-icon"><JobIcon type={job.type} moduleId={job.moduleId} /></span><p className="eyebrow">PROCESSING JOB</p><h2>{job.stage}</h2><p>{job.detail || "Work continues in the background. You can safely leave this page."}</p><div className="processing-progress"><Progress job={job} /><span>{job.progress}%</span></div><div className="processing-steps"><span className="done">Uploaded</span><span className={job.progress > 8 ? "done" : "active"}>Prepared</span><span className={job.progress > 90 ? "done" : "active"}>Processed</span><span className={job.progress === 100 ? "done" : ""}>Complete</span></div></div>;
   const totals = Object.values(flowRun.nodes).reduce<Record<string, number>>((counts, node) => ({ ...counts, [node.status]: (counts[node.status] || 0) + 1 }), {});
   return <div className="workflow-processing-view">
     <header><div><p className="eyebrow">WORKFLOW RUN</p><h2>{flowRun.definition.name}</h2><p><strong>{flowRun.stage}</strong>{job.detail && <span> · {job.detail}</span>}</p></div><span className="workflow-processing-percent">{flowRun.progress}%</span></header>
@@ -453,6 +455,8 @@ function OutputPreview({ content, kind, html, mode, title, src }: { content: str
   if (kind === "audio") return <div className="source-media-preview"><audio controls preload="metadata" src={src} /></div>;
   if (kind === "video") return <div className="source-media-preview"><video controls preload="metadata" src={src} /></div>;
   if (mode === "source") return <pre className="source-preview"><code>{content}</code></pre>;
+  const mindMap = kind === "json" ? parseMindMap(content) : undefined;
+  if (mindMap) return <MindMapViewer document={mindMap} />;
   if (html) return <AutoHeightHtmlPreview content={html} title={title} />;
   if (kind === "markdown") return <article className="prose-output"><MarkdownRenderer>{markdownForPreview(content)}</MarkdownRenderer></article>;
   if (kind === "json") { let formatted = content; try { formatted = JSON.stringify(JSON.parse(content), null, 2); } catch { /* show original */ } return <pre className="source-preview json"><code>{formatted}</code></pre>; }
@@ -509,8 +513,9 @@ function AutoHeightHtmlPreview({ content, title }: { content: string; title: str
 
 function FileTypeIcon({ file }: { file: string }) {
   const kind = getFileKind(file);
-  const Icon = kind === "json" ? FileJson : kind === "subtitle" ? Subtitles : kind === "html" ? Code2 : kind === "image" ? ImageIcon : kind === "audio" ? FileAudio : kind === "video" ? FileVideo : kind === "pdf" ? File : FileText;
-  return <span className={cn("file-type-icon", `file-type-${kind}`)}><Icon size={17} /></span>;
+  const mindmap = file === "mindmap.json" || file.endsWith(".mindmap.json");
+  const Icon = mindmap ? Network : kind === "json" ? FileJson : kind === "subtitle" ? Subtitles : kind === "html" ? Code2 : kind === "image" ? ImageIcon : kind === "audio" ? FileAudio : kind === "video" ? FileVideo : kind === "pdf" ? File : FileText;
+  return <span className={cn("file-type-icon", `file-type-${mindmap ? "mindmap" : kind}`)}><Icon size={17} /></span>;
 }
 
 export function getFileKind(file: string) {
@@ -554,6 +559,8 @@ function describeOutput(file: string) {
   if (file.startsWith("generated-image.")) return "Generated image";
   if (file === "grounding-preview.svg") return "Image with located regions";
   if (file === "grounding.annotations.json") return "Locations and query data";
+  if (file === "mindmap.json" || file.endsWith(".mindmap.json")) return "Interactive mind map";
+  if (file === "mindmap-outline.md" || file.startsWith("mindmap-outline-")) return "Mind map outline";
   if (file.startsWith("summary.")) return "Prompt preset result";
   if (file.endsWith(".json")) return "Structured data";
   if (file.endsWith(".srt")) return "SRT subtitle track";
@@ -570,6 +577,8 @@ function displayOutputName(file: string) {
   if (file.startsWith("generated-image.")) return "Generated image";
   if (file === "grounding-preview.svg") return "Located regions";
   if (file === "grounding.annotations.json") return "Grounding data";
+  if (file === "mindmap.json" || file.endsWith(".mindmap.json")) return "Mind map";
+  if (file === "mindmap-outline.md" || file.startsWith("mindmap-outline-")) return "Mind map outline";
   if (file.startsWith("summary.") && file.endsWith(".md")) {
     const slug = file.slice("summary.".length, -".md".length);
     return slug.split("-").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");

@@ -6,7 +6,7 @@ import cors from "cors";
 import multer from "multer";
 import { z } from "zod";
 import { ENDPOINT_KINDS, MODEL_INPUT_CAPABILITIES, MODULE_IDS, SEARCH_SCOPES } from "../shared/contracts.js";
-import { getModuleContract, moduleAcceptsArtifact, moduleWorkflowForArtifact } from "../shared/module-router.js";
+import { getModuleContract, moduleWorkflowForArtifact } from "../shared/module-router.js";
 import { checkEndpoint, openChatStream } from "./ai.js";
 import { modelMessagesForChat } from "./chat-messages.js";
 import { APP_VERSION, CLIENT_DIR, DATA_DIR, PORT } from "./config.js";
@@ -22,6 +22,7 @@ import {
   createFileTranslationJob,
   createGroundingJob,
   createJob,
+  createMindMapJob,
   createTextTranslationJob,
   createTextToImageJob,
   deleteChat,
@@ -116,6 +117,12 @@ const workflowRunSchema = z.object({
 const textToImageSchema = z.object({
   prompt: z.string().trim().min(1).max(12_000),
   size: z.enum(["1024x1024", "1536x1024", "1024x1536"]).default("1024x1024"),
+});
+const mindMapSchema = z.object({
+  subject: z.string().trim().min(1).max(500_000),
+  instructions: z.string().trim().max(4000).default(""),
+  depth: z.number().int().min(2).max(6).default(4),
+  breadth: z.number().int().min(2).max(8).default(5),
 });
 const groundingQueriesSchema = z.array(z.string().trim().min(1).max(500)).min(1).max(12);
 const textTranslationSchema = z.object({
@@ -273,6 +280,20 @@ app.post("/api/modules/text-to-image/jobs", async (request, response) => {
   }
   response.status(201).json(job);
 });
+app.post("/api/modules/mindmap/jobs", async (request, response) => {
+  const input = mindMapSchema.parse(request.body);
+  const settings = await readSettings();
+  const module = listModules(settings).find((candidate) => candidate.id === "mindmap");
+  if (!module?.configured) return response.status(409).json({ error: "Configure and enable the LLM service first" });
+  const job = await createMindMapJob(input.subject, input);
+  try {
+    await enqueueJob(job.id);
+  } catch (error) {
+    await updateJob(job.id, { status: "failed", stage: "Queue unavailable", error: error instanceof Error ? error.message : String(error) });
+    throw error;
+  }
+  response.status(201).json(job);
+});
 
 app.get("/api/prompts", async (_request, response) => response.json(await listPrompts()));
 app.put("/api/prompts/:slug", async (request, response) => {
@@ -329,7 +350,7 @@ app.post("/api/jobs/:id/runs", async (request, response) => {
   if (input.inputArtifactIds.length > contract.handoff.maxInputs) return response.status(400).json({ error: `${module.title} accepts at most ${contract.handoff.maxInputs} input${contract.handoff.maxInputs === 1 ? "" : "s"}` });
   const artifacts = input.inputArtifactIds.map((id) => job.artifacts.find((artifact) => artifact.id === id));
   if (artifacts.some((artifact) => !artifact)) return response.status(400).json({ error: "One or more input artifacts do not exist" });
-  if (artifacts.some((artifact) => artifact && !moduleAcceptsArtifact(input.moduleId, artifact.kind))) return response.status(400).json({ error: "The selected artifact is not compatible with this module" });
+  if (artifacts.some((artifact) => artifact && !module.accepts.includes(artifact.kind))) return response.status(400).json({ error: "The selected artifact is not compatible with this module" });
   if (artifacts.some((artifact) => artifact && moduleWorkflowForArtifact(input.moduleId, artifact.kind) !== input.workflowId)) return response.status(400).json({ error: "The selected artifact is not compatible with this workflow" });
   const queued = await enqueueWorkflowRun(job.id, input.moduleId, input.workflowId, input.params, input.inputArtifactIds);
   response.status(202).json(queued);

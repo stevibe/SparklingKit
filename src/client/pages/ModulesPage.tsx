@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { ArrowLeftRight, ArrowRight, AudioLines, CloudUpload, ExternalLink, FileText, FolderOpen, Image as ImageIcon, Languages, MessageCircle, ScanSearch, ScanText, Search, X } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, AudioLines, CloudUpload, ExternalLink, FileText, FolderOpen, Image as ImageIcon, Languages, MessageCircle, Network, ScanSearch, ScanText, Search, X } from "lucide-react";
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, uploadGroundingJob, uploadJob } from "../api";
 import { cn, JobIcon, StatusBadge, timeAgo } from "../components/ui";
@@ -19,6 +19,7 @@ const icons = {
   languages: Languages,
   "scan-search": ScanSearch,
   image: ImageIcon,
+  network: Network,
   "message-circle": MessageCircle,
 };
 
@@ -28,6 +29,7 @@ const moduleHistoryTitles: Record<ModuleId, string> = {
   translation: "Translations",
   grounding: "Located images",
   "text-to-image": "Generated images",
+  mindmap: "Mind maps",
   chat: "Conversations",
 };
 
@@ -82,6 +84,10 @@ export function ModulePage() {
   const [groundingQueries, setGroundingQueries] = useState("");
   const [imagePrompt, setImagePrompt] = useState("");
   const [imageSize, setImageSize] = useState("1024x1024");
+  const [mindMapMode, setMindMapMode] = useState<"topic" | "result">("topic");
+  const [mindMapSubject, setMindMapSubject] = useState("");
+  const [mindMapDepth, setMindMapDepth] = useState("4");
+  const [mindMapBreadth, setMindMapBreadth] = useState("5");
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -149,6 +155,7 @@ export function ModulePage() {
     if (compatibleArtifacts.some((entry) => entry.value === requested)) {
       setSelectedArtifact(requested);
       if (moduleId === "translation") setTranslationMode("document");
+      if (moduleId === "mindmap") setMindMapMode("result");
     }
   }, [compatibleArtifacts, moduleId, searchParams, selectedArtifact]);
   useEffect(() => {
@@ -317,6 +324,33 @@ export function ModulePage() {
     }
   }
 
+  async function createMindMap() {
+    if (!mindMapSubject.trim() && mindMapMode === "topic") return;
+    setUploading(true); setError("");
+    try {
+      const options = { instructions: mindMapMode === "result" ? mindMapSubject.trim() : "", depth: Number(mindMapDepth), breadth: Number(mindMapBreadth) };
+      if (mindMapMode === "result") {
+        if (!selectedArtifactEntry) throw new Error("Choose a source result");
+        const workflowId = moduleWorkflowForArtifact("mindmap", selectedArtifactEntry.artifact.kind);
+        if (!workflowId) throw new Error("This result cannot be turned into a mind map");
+        const queued = await api.startRun(selectedArtifactEntry.job.id, {
+          moduleId: "mindmap",
+          workflowId,
+          inputArtifactIds: [selectedArtifactEntry.artifact.id],
+          params: { ...options, artifactId: selectedArtifactEntry.artifact.id },
+        });
+        navigate(`/jobs/${queued.job.id}`);
+      } else {
+        const job = await api.createMindMapJob(mindMapSubject.trim(), options);
+        navigate(`/jobs/${job.id}`);
+      }
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+    } finally {
+      setUploading(false);
+    }
+  }
+
   return <div className="page-wrap content-page module-page">
     <div className="module-workspace-layout"><section className="module-workspace-column">
     <div className="module-content">
@@ -363,6 +397,13 @@ export function ModulePage() {
         {translationError && <p className="form-error mt-4">{translationError}</p>}
         <div className="module-form-actions"><button className="button-primary" onClick={() => void saveTranslation()} disabled={savingTranslation || translationPending || translatingPreview || !module.configured || !sourceText.trim() || !translatedText || !targetLanguage}>{savingTranslation ? "Saving…" : <><Languages size={18} />Save translation</>}</button></div>
       </>}
+    </section> : module.id === "mindmap" ? <section className="module-form-card mindmap-form">
+      <div className="module-form-heading translation-form-heading"><div><h2>Build an interactive mind map</h2><p>Start with an idea or organize an existing result into branches you can explore.</p></div><div className="module-mode-tabs" role="tablist"><button className={mindMapMode === "topic" ? "active" : ""} onClick={() => { setMindMapMode("topic"); setSelectedArtifact(""); }}>Topic</button><button className={mindMapMode === "result" ? "active" : ""} onClick={() => setMindMapMode("result")}>Existing result</button></div></div>
+      {!module.configured && <div className="module-setup-note"><span>The LLM service is not configured yet.</span><Link to="/settings" state={{ backgroundLocation: location }}>Configure service</Link></div>}
+      {mindMapMode === "result" && <><label className="field-label">Source result<SearchSelect className="module-search-select" value={selectedArtifact} onChange={setSelectedArtifact} options={compatibleArtifacts.map(({ job, artifact, value }) => ({ value, label: `${job.title} — ${artifact.name}`, keywords: `${artifact.mimeType} ${artifact.kind}` }))} placeholder="Choose a document, result, or image" searchPlaceholder="Search source results" emptyMessage="No compatible results" ariaLabel="Mind map source result" /></label>{!compatibleArtifacts.length && <p className="module-form-empty">Complete another tool first, then turn its result into a mind map.</p>}</>}
+      <label className="field-label">{mindMapMode === "topic" ? "Topic or source notes" : "Focus (optional)"}<textarea className="input mt-2 mindmap-source-input" value={mindMapSubject} onChange={(event) => setMindMapSubject(event.target.value)} placeholder={mindMapMode === "topic" ? "Paste notes, describe a project, or enter a topic to explore…" : "For example: focus on decisions, dependencies, and next actions"} maxLength={500000} /></label>
+      <div className="mindmap-options"><label className="field-label">Levels<SearchSelect className="module-search-select" value={mindMapDepth} onChange={setMindMapDepth} options={[{ value: "3", label: "3 levels · concise" }, { value: "4", label: "4 levels · balanced" }, { value: "5", label: "5 levels · detailed" }, { value: "6", label: "6 levels · deep" }]} searchPlaceholder="Search depth" ariaLabel="Mind map levels" /></label><label className="field-label">Branches per node<SearchSelect className="module-search-select" value={mindMapBreadth} onChange={setMindMapBreadth} options={[{ value: "3", label: "Up to 3 · focused" }, { value: "5", label: "Up to 5 · balanced" }, { value: "7", label: "Up to 7 · broad" }]} searchPlaceholder="Search breadth" ariaLabel="Mind map branches" /></label></div>
+      <div className="module-form-actions"><button className="button-primary" onClick={() => void createMindMap()} disabled={uploading || !module.configured || (mindMapMode === "topic" ? !mindMapSubject.trim() : !selectedArtifactEntry)}>{uploading ? "Starting…" : <><Network size={18} />Create mind map</>}</button></div>
     </section> : module.id === "text-to-image" ? <section className="module-form-card image-generation-form">
       <div className="module-form-heading"><h2>Describe the image</h2><p>Write what you want to see. SparklingKit will keep the prompt and generated image together as one piece of work.</p></div>
       {!module.configured && <div className="module-setup-note"><span>The Image generation service is not configured yet.</span><Link to="/settings" state={{ backgroundLocation: location }}>Configure service</Link></div>}
@@ -385,7 +426,7 @@ function ModuleHistory({ module, jobs }: { module: ModuleDescriptor; jobs: Job[]
     <div className="module-history-list">{jobs.slice(0, 12).map((job) => {
       const image = job.outputFiles.find((file) => /\.(?:png|jpe?g|webp|gif|avif|svg)$/i.test(file));
       return <Link to={`/jobs/${job.id}`} className="module-history-item" key={job.id}>
-        {image ? <span className="module-history-thumbnail"><img src={`/api/jobs/${job.id}/files/${image.split("/").map(encodeURIComponent).join("/")}`} alt="" loading="lazy" /></span> : <JobIcon type={job.type} />}
+        {image ? <span className="module-history-thumbnail"><img src={`/api/jobs/${job.id}/files/${image.split("/").map(encodeURIComponent).join("/")}`} alt="" loading="lazy" /></span> : <JobIcon type={job.type} moduleId={job.moduleId} />}
         <span className="module-history-copy"><strong>{job.title}</strong><span><StatusBadge status={job.status} /><small>{timeAgo(job.createdAt)}</small></span></span>
         <ArrowRight size={16} />
       </Link>;

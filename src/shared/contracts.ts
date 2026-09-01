@@ -1,4 +1,4 @@
-export const MODULE_IDS = ["ocr", "transcription", "translation", "grounding", "text-to-image", "chat"] as const;
+export const MODULE_IDS = ["ocr", "transcription", "translation", "grounding", "text-to-image", "mindmap", "chat"] as const;
 export type ModuleId = (typeof MODULE_IDS)[number];
 
 export const ENDPOINT_KINDS = ["stt", "ocr", "llm", "translation", "grounding", "image-generation"] as const;
@@ -32,6 +32,7 @@ export const ARTIFACT_KINDS = [
   "grounded-image",
   "generated-image",
   "structured-data",
+  "mindmap",
   "text",
 ] as const;
 export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
@@ -93,7 +94,7 @@ export interface ModuleDescriptor {
   title: string;
   shortTitle: string;
   description: string;
-  icon: "scan-text" | "audio-lines" | "languages" | "scan-search" | "image" | "message-circle";
+  icon: "scan-text" | "audio-lines" | "languages" | "scan-search" | "image" | "network" | "message-circle";
   route: string;
   providerKind: EndpointKind;
   accepts: ArtifactKind[];
@@ -239,7 +240,7 @@ export interface SearchResponse {
 
 export const WORKFLOW_NODE_TYPES = ["input", "module", "select", "if", "switch", "merge", "save", "end", "fail"] as const;
 export type WorkflowNodeType = (typeof WORKFLOW_NODE_TYPES)[number];
-export const WORKFLOW_SERVICE_IDS = ["ocr", "transcription", "translation", "grounding", "text-to-image", "llm-prompt", "chat"] as const;
+export const WORKFLOW_SERVICE_IDS = ["ocr", "transcription", "translation", "grounding", "text-to-image", "mindmap", "llm-prompt", "chat"] as const;
 export type WorkflowServiceId = (typeof WORKFLOW_SERVICE_IDS)[number];
 
 export interface WorkflowNode {

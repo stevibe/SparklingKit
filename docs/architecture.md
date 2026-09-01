@@ -16,7 +16,7 @@ Job / work item
                     │            │
                     └── new artifacts
                                  │
-                 summarize / translate / ground / generate / chat
+          summarize / translate / ground / generate / map / chat
 ```
 
 Redis coordinates execution. The `/data` directory owns durable state and must be sufficient to inspect, back up, and recover work.
@@ -27,9 +27,9 @@ The visual workflow layer composes these same modules and artifacts as a version
 
 ### Module
 
-A user-facing capability such as OCR, Transcription, Translation, Grounding, Text to image, or Chat. A module declares accepted and produced artifact kinds, actions, provider requirements, route metadata, and implementation availability.
+A user-facing capability such as OCR, Transcription, Translation, Grounding, Text to image, Mind map, or Chat. A module declares accepted and produced artifact kinds, actions, provider requirements, route metadata, and implementation availability.
 
-The authoritative catalog is `src/server/modules/registry.ts` and is exposed through `GET /api/modules`.
+The authoritative cross-layer catalog is `src/shared/module-router.ts`; `src/server/modules/registry.ts` projects it against configured providers and exposes it through `GET /api/modules`.
 
 ### Provider
 
@@ -56,6 +56,7 @@ Structured canonical artifacts are required where positional provenance matters:
 - Grounding: versioned image annotations with pixel-coordinate boxes, query labels, and source lineage. Future provider types may add text spans, PDF page boxes, or time ranges.
 - Redaction: a derivative plus an audit report; originals are immutable.
 - Text to image: the written prompt is a source artifact and each generated bitmap is a derived image artifact.
+- Mind map: a versioned JSON tree is the interactive canonical artifact; a generated Markdown outline keeps the same information portable for text-oriented tools.
 
 ## Durable layout
 

@@ -306,4 +306,44 @@ describe("v2 workflow architecture", () => {
     expect(preview.derivedFrom).toEqual([generated.id]);
     expect(await fs.readFile(store.safeOutputPath(created.id, "grounding-preview.svg"), "utf8")).toContain("cat");
   });
+
+  it("creates a durable interactive mind map and Markdown outline with the LLM", async () => {
+    let requestBody = "";
+    server = createServer((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on("data", (chunk) => chunks.push(chunk));
+      request.on("end", () => {
+        requestBody = Buffer.concat(chunks).toString("utf8");
+        response.setHeader("Content-Type", "application/json");
+        response.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+          title: "Local AI workspace",
+          root: { label: "SparklingKit", note: "A file-oriented workspace", children: [
+            { label: "Tools", children: [{ label: "OCR", children: [] }, { label: "Transcription", children: [] }] },
+            { label: "Workflows", children: [] },
+          ] },
+        }) } }] }));
+      });
+    });
+    await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Test server did not start");
+
+    const store = await import("./store.js");
+    await store.initializeData();
+    const settings = await store.readSettings();
+    await store.writeSettings({ ...settings, endpoints: { ...settings.endpoints, llm: { enabled: true, baseUrl: `http://127.0.0.1:${address.port}/v1`, model: "mind-map-model", apiKey: "", capabilities: ["text"] } } });
+    const created = await store.createMindMapJob("Explain the SparklingKit workspace", { depth: 4, breadth: 5 });
+    const processor = await import("./processor.js");
+    await processor.processRun(created.id, created.runs[0].id);
+
+    const completed = await store.readJob(created.id);
+    expect(completed.status).toBe("done");
+    expect(completed.moduleId).toBe("mindmap");
+    expect(completed.outputFiles).toEqual(["mindmap.json", "mindmap-outline.md"]);
+    expect(completed.artifacts.map((artifact) => artifact.kind)).toEqual(["text", "mindmap", "document"]);
+    const mindmap = JSON.parse(await fs.readFile(store.safeOutputPath(created.id, "mindmap.json"), "utf8"));
+    expect(mindmap).toMatchObject({ version: 1, title: "Local AI workspace", root: { id: "node-1", label: "SparklingKit" } });
+    expect(await fs.readFile(store.safeOutputPath(created.id, "mindmap-outline.md"), "utf8")).toContain("**OCR**");
+    expect(JSON.parse(requestBody)).toMatchObject({ model: "mind-map-model", response_format: { type: "json_object" } });
+  });
 });

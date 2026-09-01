@@ -1,6 +1,6 @@
 # SparklingKit
 
-> A local-first, file-oriented AI workspace for OCR, transcription, translation, visual grounding, image generation, chat, and reusable workflows.
+> A local-first, file-oriented AI workspace for OCR, transcription, translation, visual grounding, image generation, interactive mind maps, chat, and reusable workflows.
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-339933.svg)](https://nodejs.org/)
@@ -17,7 +17,7 @@ AI work rarely ends after one operation. After recording a meeting, you may want
 
 The same applies to images: generate one from a prompt, pass it directly into visual grounding, and search for a person, object, text region, or other detail inside it. Every source and generated result remains a typed artifact with its files, lineage, and processing history, so you can always see where it came from and choose a compatible **Continue with** action.
 
-SparklingKit is built around small, atomic capabilities—OCR, transcription, translation, grounding, image generation, and language-model reasoning—that can be combined without coupling the underlying services. For repeatable work, the node-based workflow editor lets you connect those same capabilities with typed inputs, conditions, branches, merges, and explicit file outputs. Design the flow once, then run it again with a new recording, document, image, or piece of text.
+SparklingKit is built around small, atomic capabilities—OCR, transcription, translation, grounding, image generation, mind mapping, and language-model reasoning—that can be combined without coupling the underlying services. A document, set of notes, or image can become an interactive mind map with collapsible branches, while its portable JSON and Markdown outline remain available to other tools. For repeatable work, the node-based workflow editor lets you connect those same capabilities with typed inputs, conditions, branches, merges, and explicit file outputs. Design the flow once, then run it again with a new recording, document, image, or piece of text.
 
 For workloads involving recorded meetings, private documents, scanned PDFs, and personal images, we strongly recommend running models locally whenever suitable hardware is available. Local inference keeps sensitive material on infrastructure you control, avoids repeatedly uploading large files, and gives you direct ownership of model selection, capacity, availability, and data retention. SparklingKit is designed local-first: source files, generated artifacts, processing history, workflow definitions, and service endpoints remain under your control. It is not local-only, however. Compatible cloud APIs can also be configured as service endpoints, allowing SparklingKit to serve as one consistent interface for local models, cloud-hosted models, or a deliberate combination of both.
 
@@ -135,6 +135,7 @@ The DGX starter enables the status reporter, which surfaces unified-memory use, 
 | Translation | Pasted text, documents, transcripts | Translated text or document artifacts |
 | Grounding | Images and text queries | Framed image preview and normalized box annotations |
 | Text to image | Prompt or compatible text result | Generated image |
+| Mind map | Topic, text result, structured data, or an image with a vision-capable LLM | Interactive JSON map and Markdown outline |
 | Chat | Text, documents, structured data, and optionally images | Referenced conversation |
 
 Each module has its own history rail, source preview, and detail view. Jobs, chats, source files, and generated files can be renamed or deleted. Compatible outputs expose actions such as translating a transcript, grounding a generated image, creating an image from text, or opening a result in chat.
@@ -148,6 +149,7 @@ The Workbench collects common actions into a lightweight grid:
 - text-to-image generation with common canvas sizes;
 - a chat starter;
 - a shortcut to image grounding;
+- a shortcut to interactive mind-map generation;
 - enabled reusable workflows;
 - searchable recent work.
 
@@ -164,6 +166,7 @@ Service nodes:
 - Translation
 - Grounding
 - Text to image
+- Mind map
 - LLM prompt
 - Create chat
 
@@ -329,6 +332,7 @@ Back up the entire `data/` directory to preserve configuration, work history, so
 | Translation | preview, pasted-text, and uploaded-document routes under `/api/modules/translation` |
 | Grounding | `POST /api/modules/grounding/jobs` |
 | Image generation | `POST /api/modules/text-to-image/jobs` |
+| Mind map | `POST /api/modules/mindmap/jobs` |
 | Chat | chat CRUD and streaming messages under `/api/chats` |
 | Workflows | definition CRUD/validation and durable flow runs under `/api/workflows` |
 

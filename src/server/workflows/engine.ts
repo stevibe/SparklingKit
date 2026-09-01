@@ -42,7 +42,7 @@ function incomingArtifacts(flow: FlowRun, node: WorkflowNode, artifacts: Artifac
   return unique(ids);
 }
 
-const textualArtifactKinds = new Set<ArtifactKind>(["document", "transcript", "subtitle", "translation", "annotations", "redacted-document", "structured-data", "text"]);
+const textualArtifactKinds = new Set<ArtifactKind>(["document", "transcript", "subtitle", "translation", "annotations", "redacted-document", "structured-data", "mindmap", "text"]);
 
 async function factValue(fact: string, artifacts: Artifact[], flow: FlowRun): Promise<unknown> {
   const first = artifacts[0];
@@ -104,7 +104,7 @@ function moduleGroups(node: WorkflowNode, artifacts: Artifact[]): Array<{ module
     grouped.set(workflowId, [...(grouped.get(workflowId) || []), artifact]);
   }
   return [...grouped].flatMap(([workflowId, inputs]) => {
-    const maximum = serviceId === "translation" || serviceId === "grounding" || serviceId === "text-to-image" ? 1 : 100;
+    const maximum = serviceId === "translation" || serviceId === "grounding" || serviceId === "text-to-image" || serviceId === "mindmap" ? 1 : 100;
     const batches: Artifact[][] = [];
     for (let index = 0; index < inputs.length; index += maximum) batches.push(inputs.slice(index, index + maximum));
     return batches.map((batch) => ({ moduleId: serviceId as ModuleId, workflowId, artifacts: batch }));

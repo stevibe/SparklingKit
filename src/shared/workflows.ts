@@ -38,7 +38,7 @@ export function workflowServiceContracts(modelInputs: readonly ModelInputCapabil
     if (!contract) throw new Error(`Module contract ${id} is missing`);
     return { id, title: contract.title, accepts: acceptedArtifactKinds(contract, modelInputs), produces: [...contract.produces] };
   });
-  const llmAccepts = [...TEXT_ARTIFACT_KINDS, "annotations", "structured-data"] as ArtifactKind[];
+  const llmAccepts = [...TEXT_ARTIFACT_KINDS, "annotations", "structured-data", "mindmap"] as ArtifactKind[];
   if (modelInputs.includes("image")) llmAccepts.push(...IMAGE_ARTIFACT_KINDS);
   return [
     ...moduleContracts,

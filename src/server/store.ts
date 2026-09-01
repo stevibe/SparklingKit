@@ -170,6 +170,7 @@ function sourceArtifactKind(input: { name: string; mimeType: string }): Artifact
 
 function outputArtifactKind(file: string): ArtifactKind {
   const lower = file.toLowerCase();
+  if (lower === "mindmap.json" || lower.endsWith(".mindmap.json")) return "mindmap";
   if (lower.includes("grounding") && /\.(?:svg|png|jpe?g|webp)$/.test(lower)) return "grounded-image";
   if (/\.(?:png|jpe?g|webp|gif|avif)$/.test(lower)) return "generated-image";
   if (/\.(?:srt|vtt)$/.test(lower)) return "subtitle";
@@ -366,6 +367,59 @@ export async function createTextToImageJob(prompt: string, params: Record<string
     runs: [run],
     warnings: [],
     params: { ...params, prompt: normalizedPrompt },
+  };
+  await atomicWriteJson(path.join(root, "job.json"), manifest);
+  return manifest;
+}
+
+export async function createMindMapJob(subject: string, params: Record<string, unknown> = {}): Promise<JobManifest> {
+  const normalizedSubject = subject.trim();
+  if (!normalizedSubject) throw invalid("Enter a topic or source notes");
+  const subjectTitle = normalizedSubject.replace(/\s+/g, " ").slice(0, 72);
+  const title = `Mind map · ${subjectTitle}`;
+  const settings = await readSettings();
+  const id = `${timestampId(settings.ui.timezone)}_${slugify(title)}-${randomUUID().slice(0, 6)}`;
+  const root = jobDir(id);
+  await Promise.all(["input", "work", "output"].map((dir) => fs.mkdir(path.join(root, dir), { recursive: true })));
+  const storedName = "source.txt";
+  await fs.writeFile(path.join(root, "input", storedName), `${normalizedSubject}\n`, "utf8");
+  const inputs = [{ name: "Mind map source.txt", storedName, mimeType: "text/plain", size: Buffer.byteLength(`${normalizedSubject}\n`) }];
+  const now = new Date().toISOString();
+  const artifacts = sourceArtifacts(inputs, now);
+  const runParams = { ...params, artifactId: artifacts[0].id, subject: normalizedSubject };
+  const run: WorkflowRun = {
+    id: `run-${randomUUID().slice(0, 8)}`,
+    moduleId: "mindmap",
+    workflowId: "mindmap.default",
+    status: "queued",
+    progress: 0,
+    stage: "Waiting for a worker",
+    createdAt: now,
+    updatedAt: now,
+    inputArtifactIds: artifacts.map((artifact) => artifact.id),
+    outputArtifactIds: [],
+    params: runParams,
+    steps: [],
+    warnings: [],
+  };
+  const manifest: JobManifest = {
+    schemaVersion: 2,
+    id,
+    type: "text",
+    moduleId: "mindmap",
+    workflowId: "mindmap.default",
+    status: "queued",
+    createdAt: now,
+    updatedAt: now,
+    title,
+    progress: 0,
+    stage: "Waiting for a worker",
+    inputs,
+    outputFiles: [],
+    artifacts,
+    runs: [run],
+    warnings: [],
+    params: runParams,
   };
   await atomicWriteJson(path.join(root, "job.json"), manifest);
   return manifest;

@@ -104,6 +104,21 @@ export const MODULE_CONTRACTS: readonly ModuleContract[] = [
     implementation: "ready",
   },
   {
+    id: "mindmap",
+    title: "Mind map",
+    shortTitle: "Map",
+    description: "Turn a topic, document, or image into an explorable visual map.",
+    icon: "network",
+    route: "/tools/mindmap",
+    providerKind: "llm",
+    accepts: [...textResults, "structured-data"],
+    produces: ["mindmap", "document"],
+    handoff: { mode: "workflow", workflows: [{ workflowId: "mindmap.default", accepts: [...textResults, "structured-data", ...imageResults] }], maxInputs: 1 },
+    actionLabel: "Create mind map",
+    actionDescription: "Organize this result as an interactive mind map",
+    implementation: "ready",
+  },
+  {
     id: "chat",
     title: "Chat",
     shortTitle: "Chat",
@@ -111,7 +126,7 @@ export const MODULE_CONTRACTS: readonly ModuleContract[] = [
     icon: "message-circle",
     route: "/chat",
     providerKind: "llm",
-    accepts: [...textResults, "annotations", "structured-data"],
+    accepts: [...textResults, "annotations", "structured-data", "mindmap"],
     produces: ["text"],
     handoff: { mode: "conversation" },
     actionLabel: "Ask in chat",
@@ -126,7 +141,7 @@ export function getModuleContract(moduleId: ModuleId) {
 }
 
 export function acceptedArtifactKinds(contract: ModuleContract, modelInputs: readonly ModelInputCapability[] = ["text"]) {
-  if (contract.id !== "chat" || !modelInputs.includes("image")) return [...contract.accepts];
+  if (!["chat", "mindmap"].includes(contract.id) || !modelInputs.includes("image")) return [...contract.accepts];
   return [...new Set<ArtifactKind>([...contract.accepts, ...imageResults])];
 }
 
