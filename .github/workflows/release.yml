@@ -28,6 +28,11 @@ jobs:
           node-version: 24
           cache: npm
 
+      - name: Install media test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ffmpeg
+
       - name: Validate source
         run: |
           npm ci
@@ -135,3 +140,13 @@ jobs:
             "${release_flags[@]}" \
             --generate-notes \
             --title "SparklingKit ${GITHUB_REF_NAME#v}"
+
+  publish-run-site:
+    needs: release
+    uses: ./.github/workflows/publish-run-site.yml
+    with:
+      release_tag: ${{ github.ref_name }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
