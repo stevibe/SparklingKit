@@ -33,7 +33,7 @@ const moduleHistoryTitles: Record<ModuleId, string> = {
   chat: "Conversations",
 };
 
-const translationDebounceMs = 600;
+const translationDebounceMs = 900;
 
 function useModules() {
   const [modules, setModules] = useState<ModuleDescriptor[]>([]);
@@ -79,6 +79,7 @@ export function ModulePage() {
   const [translationJobId, setTranslationJobId] = useState("");
   const [translationPending, setTranslationPending] = useState(false);
   const [translatingPreview, setTranslatingPreview] = useState(false);
+  const [translationPreviewTruncated, setTranslationPreviewTruncated] = useState(false);
   const [savingTranslation, setSavingTranslation] = useState(false);
   const [translationError, setTranslationError] = useState("");
   const [groundingQueries, setGroundingQueries] = useState("");
@@ -118,12 +119,14 @@ export function ModulePage() {
     if (moduleId !== "translation" || translationMode !== "text") {
       setTranslationPending(false);
       setTranslatingPreview(false);
+      setTranslationPreviewTruncated(false);
       return;
     }
     const text = sourceText.trim();
     if (!text || !module?.configured) {
       setTranslationPending(false);
       setTranslatingPreview(false);
+      setTranslationPreviewTruncated(false);
       if (!text) setTranslatedText("");
       return;
     }
@@ -136,7 +139,12 @@ export function ModulePage() {
       setTranslationPending(false);
       setTranslatingPreview(true);
       api.previewTranslation(text, sourceLanguage, targetLanguage, controller.signal)
-        .then(({ text: result }) => { if (!controller.signal.aborted) setTranslatedText(result); })
+        .then(({ text: result, truncated }) => {
+          if (!controller.signal.aborted) {
+            setTranslatedText(result);
+            setTranslationPreviewTruncated(truncated);
+          }
+        })
         .catch((value) => { if (!controller.signal.aborted) setTranslationError(value instanceof Error ? value.message : String(value)); })
         .finally(() => { if (!controller.signal.aborted) setTranslatingPreview(false); });
     }, translationDebounceMs);
@@ -392,7 +400,7 @@ export function ModulePage() {
         <div className="quick-translation-grid">
           <div className="translation-pane"><LanguageSelect label="From" value={sourceLanguage} allowAuto recent={recentLanguages} onChange={(value) => { setTranslationJobId(""); setSourceLanguage(value); }} /><textarea value={sourceText} onChange={(event) => { setTranslationJobId(""); setSourceText(event.target.value); }} placeholder="Enter text" maxLength={50000} /><small>{sourceText.length.toLocaleString()} characters</small></div>
           <button className="translation-flip" onClick={flipTranslation} disabled={sourceLanguage === "auto-detect"} title={sourceLanguage === "auto-detect" ? "Choose a source language before swapping" : "Swap languages and text"} aria-label="Swap languages and text"><ArrowLeftRight size={19} /></button>
-          <div className="translation-pane output"><LanguageSelect label="To" value={targetLanguage} recent={recentLanguages} onChange={(value) => { setTranslationJobId(""); setTargetLanguage(value); }} /><textarea className={cn((translationPending || translatingPreview) && "updating")} value={translatedText} readOnly aria-busy={translationPending || translatingPreview} placeholder={translationPending ? "Waiting…" : translatingPreview ? "Translating…" : "Translation"} />{translationJobId ? <Link to={`/jobs/${translationJobId}`}><ExternalLink size={14} />Open job</Link> : <small>{translationPending ? "Waiting for you to pause…" : translatingPreview ? "Updating translation…" : "Live preview"}</small>}</div>
+          <div className="translation-pane output"><LanguageSelect label="To" value={targetLanguage} recent={recentLanguages} onChange={(value) => { setTranslationJobId(""); setTargetLanguage(value); }} /><textarea className={cn((translationPending || translatingPreview) && "updating")} value={translatedText} readOnly aria-busy={translationPending || translatingPreview} placeholder={translationPending ? "Waiting…" : translatingPreview ? "Translating…" : "Translation"} />{translationJobId ? <Link to={`/jobs/${translationJobId}`}><ExternalLink size={14} />Open job</Link> : <small>{translationPending ? "Waiting for you to pause…" : translatingPreview ? "Updating translation…" : translationPreviewTruncated ? "Previewing the first 2,000 characters. Save to translate everything in the background." : "Live preview"}</small>}</div>
         </div>
         {translationError && <p className="form-error mt-4">{translationError}</p>}
         <div className="module-form-actions"><button className="button-primary" onClick={() => void saveTranslation()} disabled={savingTranslation || translationPending || translatingPreview || !module.configured || !sourceText.trim() || !translatedText || !targetLanguage}>{savingTranslation ? "Saving…" : <><Languages size={18} />Save translation</>}</button></div>

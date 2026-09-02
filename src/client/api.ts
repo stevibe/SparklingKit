@@ -42,7 +42,7 @@ export const api = {
     if (moduleId) params.set("moduleId", moduleId);
     return request<SearchResponse>(`/api/search?${params}`, { signal });
   },
-  previewTranslation: (text: string, sourceLanguage: string, targetLanguage: string, signal?: AbortSignal) => request<{ text: string }>("/api/modules/translation/preview", { method: "POST", body: JSON.stringify({ text, sourceLanguage, targetLanguage }), signal }),
+  previewTranslation: (text: string, sourceLanguage: string, targetLanguage: string, signal?: AbortSignal) => request<{ text: string; truncated: boolean }>("/api/modules/translation/preview", { method: "POST", body: JSON.stringify({ text, sourceLanguage, targetLanguage }), signal }),
   createTextTranslationJob: (text: string, sourceLanguage: string, targetLanguage: string) => request<Job>("/api/modules/translation/text", { method: "POST", body: JSON.stringify({ text, sourceLanguage, targetLanguage }) }),
   createImageJob: (prompt: string, size: string) => request<Job>("/api/modules/text-to-image/jobs", { method: "POST", body: JSON.stringify({ prompt, size }) }),
   createMindMapJob: (subject: string, options: { instructions?: string; depth: number; breadth: number }) => request<Job>("/api/modules/mindmap/jobs", { method: "POST", body: JSON.stringify({ subject, ...options }) }),

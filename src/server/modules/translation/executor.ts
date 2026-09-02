@@ -6,8 +6,8 @@ import { readSettings, safeArtifactPath, safeOutputPath, updateJob } from "../..
 import type { WorkflowExecutionResult } from "../executors.js";
 import { translateContent } from "./service.js";
 
-function splitText(text: string, maxTokens: number) {
-  const maxChars = Math.max(4000, maxTokens * 3);
+export function splitTranslationText(text: string, maxTokens: number) {
+  const maxChars = Math.max(1000, maxTokens * 3);
   if (text.length <= maxChars) return [text];
   const chunks: string[] = [];
   let remaining = text;
@@ -43,7 +43,7 @@ export async function processTranslation(job: JobManifest, run: WorkflowRun, sig
   if (!targetLanguage) throw new Error("Choose a target language");
   const sourceLanguage = typeof run.params.sourceLanguage === "string" && run.params.sourceLanguage.trim() ? run.params.sourceLanguage.trim() : "auto-detect";
   const source = await fs.readFile(safeArtifactPath(job.id, artifact.path), "utf8");
-  const chunks = splitText(source, typeof run.params.maxInputTokens === "number" ? run.params.maxInputTokens : 24000);
+  const chunks = splitTranslationText(source, typeof run.params.maxInputTokens === "number" ? run.params.maxInputTokens : 2000);
   const translated: string[] = [];
   for (const [index, chunk] of chunks.entries()) {
     if (signal?.aborted) throw new DOMException("Translation cancelled", "AbortError");

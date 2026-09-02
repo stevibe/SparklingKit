@@ -13,7 +13,7 @@ import { APP_VERSION, CLIENT_DIR, DATA_DIR, PORT } from "./config.js";
 import { jobEvents, publishJob } from "./events.js";
 import type { ChatMessage, EndpointKind, JobKind, PromptPreset, Settings } from "./models.js";
 import { listModules } from "./modules/registry.js";
-import { translateContent } from "./modules/translation/service.js";
+import { TRANSLATION_PREVIEW_CHARACTER_LIMIT, translateContent } from "./modules/translation/service.js";
 import { searchWorkspace } from "./search.js";
 import { workflowRouter } from "./workflows/routes.js";
 import { closeQueue, enqueueJob, enqueuePreset, enqueueWorkflowRun, pingRedis, startWorker, stopJobWork, stopRunWork } from "./queue.js";
@@ -193,7 +193,11 @@ app.post("/api/modules/translation/preview", async (request, response) => {
   const settings = await readSettings();
   const module = listModules(settings).find((candidate) => candidate.id === "translation");
   if (!module?.configured) return response.status(409).json({ error: "Configure and enable the Translation service first" });
-  response.json({ text: await translateContent(settings.endpoints.translation, input.text, input.sourceLanguage, input.targetLanguage) });
+  const previewText = input.text.slice(0, TRANSLATION_PREVIEW_CHARACTER_LIMIT);
+  response.json({
+    text: await translateContent(settings.endpoints.translation, previewText, input.sourceLanguage, input.targetLanguage),
+    truncated: previewText.length < input.text.length,
+  });
 });
 app.post("/api/modules/translation/text", async (request, response) => {
   const input = textTranslationSchema.parse(request.body);
