@@ -145,6 +145,7 @@ export function JobPage() {
   const workflowLabel = flowRun?.definition.name || modules.find((module) => module.id === job.moduleId)?.title || (job.type === "audio" ? "Transcription" : "OCR");
   const html = extractHtml(preview, selectedFile);
   const canRender = selectedKind === "markdown" || Boolean(html) || selectedFile === "mindmap.json" || selectedFile.endsWith(".mindmap.json");
+  const selectedMindMap = selectedScope === "output" && selectedKind === "json" && (selectedFile === "mindmap.json" || selectedFile.endsWith(".mindmap.json"));
   const canCopy = ["markdown", "json", "subtitle", "html", "text"].includes(selectedKind);
   const selectedUrl = selectedScope === "input" ? inputFileUrl(job.id, selectedFile) : fileUrl(job.id, selectedFile);
   const selectedDisplayName = selectedScope === "input" ? selectedInput?.name || selectedFile : displayOutputName(selectedFile);
@@ -318,7 +319,7 @@ export function JobPage() {
             {selectedArtifact && (nextActions.length > 0 || compatibleWorkflows.length > 0) && <div className="artifact-flow-bar"><span>Continue with</span><div>{nextActions.map((action) => <Link className="artifact-flow-action" to={moduleHandoffUrl(action.id, job.id, selectedArtifact.id)} title={action.actionDescription} key={action.id}><FlowActionIcon moduleId={action.id} /><span>{action.actionLabel}</span><ArrowRight size={15} /></Link>)}{compatibleWorkflows.map((workflow) => <button type="button" className="artifact-flow-action workflow-flow-action" onClick={() => void runCompatibleWorkflow(workflow)} disabled={Boolean(startingWorkflowId)} title={workflow.description || `Run ${workflow.name}`} key={`workflow-${workflow.id}`}><GitBranch size={17} /><span>{workflow.name}</span>{startingWorkflowId === workflow.id ? <LoaderCircle size={15} className="animate-spin" /> : <ArrowRight size={15} />}</button>)}</div></div>}
           </div>
           {selectedScope === "output" && job.type === "audio" && job.inputs[0] && selectedFile === outputFiles[0] && <div className="workspace-player">{job.inputs[0].mimeType.startsWith("video/") ? <video controls preload="metadata" src={`/api/jobs/${job.id}/input/${encodeURIComponent(job.inputs[0].storedName)}`} /> : <audio controls preload="metadata" src={`/api/jobs/${job.id}/input/${encodeURIComponent(job.inputs[0].storedName)}`} />}</div>}
-          <div className="preview-content">{loadingPreview ? <div className="preview-loading"><span className="spinner dark" />Loading preview…</div> : <OutputPreview content={preview} kind={selectedKind} html={html} mode={previewMode} title={selectedDisplayName} src={selectedUrl} />}</div>
+          <div className={cn("preview-content", selectedMindMap && previewMode === "rendered" && "mindmap-preview-content")}>{loadingPreview ? <div className="preview-loading"><span className="spinner dark" />Loading preview…</div> : <OutputPreview content={preview} kind={selectedKind} html={html} mode={previewMode} title={selectedDisplayName} src={selectedUrl} />}</div>
         </> : <div className="workspace-empty"><FolderOpen size={36} /><h2>No output yet</h2><p>This job did not create any files.</p></div>}
       </div>
     </section>

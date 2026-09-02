@@ -1410,10 +1410,17 @@ body { background: radial-gradient(circle at 72% -15%, rgba(53, 82, 125, .16), t
 }
 
 @media (min-width: 1024px) {
-  .file-workspace:not(.workflow-run-workspace) { overflow: visible; }
-  .file-workspace:not(.workflow-run-workspace) > .file-sidebar { @apply sticky z-10 self-start overflow-hidden rounded-l-[21px]; top: 7.25rem; height: calc(100dvh - 8.25rem); }
+  .job-page { @apply h-dvh min-h-0 overflow-hidden; }
+  .job-titlebar { @apply static shrink-0; }
+  .file-workspace { @apply min-h-0 overflow-hidden; }
+  .file-workspace:not(.workflow-run-workspace) > .file-sidebar { @apply static h-auto overflow-hidden rounded-none; }
   .file-workspace:not(.workflow-run-workspace) > .file-sidebar .file-tree { @apply overflow-y-auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
-  .file-workspace:not(.workflow-run-workspace) > .preview-pane { @apply rounded-r-[21px]; }
+  .file-workspace:not(.workflow-run-workspace) > .preview-pane { @apply overflow-hidden rounded-none; }
+  .preview-sticky-stack { @apply static shrink-0; }
+  .preview-content { @apply overflow-y-auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+  .mindmap-preview-content { @apply flex overflow-hidden; }
+  .mindmap-preview-content > .mindmap-viewer { @apply h-auto min-h-0 flex-1; }
+  .mindmap-preview-content .mindmap-canvas > .react-flow { @apply min-h-0; }
 }
 
 @media (max-width: 767px) {
