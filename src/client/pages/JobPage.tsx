@@ -461,12 +461,13 @@ function WorkflowRunGraph({ flowRun }: { flowRun: FlowRun }) {
 }
 
 function ProcessingView({ job, flowRun }: { job: Job; flowRun?: FlowRun }) {
-  if (!flowRun) return <div className="processing-view"><span className="processing-icon"><JobIcon type={job.type} moduleId={job.moduleId} /></span><p className="eyebrow">PROCESSING JOB</p><h2>{job.stage}</h2><p>{job.detail || "Work continues in the background. You can safely leave this page."}</p><div className="processing-progress"><Progress job={job} /><span>{job.progress}%</span></div><div className="processing-steps"><span className="done">Uploaded</span><span className={job.progress > 8 ? "done" : "active"}>Prepared</span><span className={job.progress > 90 ? "done" : "active"}>Processed</span><span className={job.progress === 100 ? "done" : ""}>Complete</span></div></div>;
+  const backgroundNote = <p className="processing-background-note">Processing continues in the background, so you can safely leave this page and return at any time to check its progress.</p>;
+  if (!flowRun) return <div className="processing-view"><span className="processing-icon"><JobIcon type={job.type} moduleId={job.moduleId} /></span><p className="eyebrow">PROCESSING JOB</p><h2>{job.stage}</h2>{job.detail && <p>{job.detail}</p>}<div className="processing-progress"><Progress job={job} /><span>{job.progress}%</span></div><div className="processing-steps"><span className="done">Uploaded</span><span className={job.progress > 8 ? "done" : "active"}>Prepared</span><span className={job.progress > 90 ? "done" : "active"}>Processed</span><span className={job.progress === 100 ? "done" : ""}>Complete</span></div>{backgroundNote}</div>;
   const totals = Object.values(flowRun.nodes).reduce<Record<string, number>>((counts, node) => ({ ...counts, [node.status]: (counts[node.status] || 0) + 1 }), {});
   return <div className="workflow-processing-view">
     <header><div><p className="eyebrow">WORKFLOW RUN</p><h2>{flowRun.definition.name}</h2><p><strong>{flowRun.stage}</strong>{job.detail && <span> · {job.detail}</span>}</p></div><span className="workflow-processing-percent">{flowRun.progress}%</span></header>
     <WorkflowRunGraph flowRun={flowRun} />
-    <footer><div className="workflow-status-summary">{Object.entries(totals).map(([status, count]) => <span className={`status-${status}`} key={status}><i />{count} {status}</span>)}</div><div className="workflow-progress-track" aria-label={`${flowRun.progress}% complete`}><span style={{ width: `${flowRun.progress}%` }} /></div></footer>
+    <footer><div className="workflow-status-summary">{Object.entries(totals).map(([status, count]) => <span className={`status-${status}`} key={status}><i />{count} {status}</span>)}</div><div className="workflow-progress-track" aria-label={`${flowRun.progress}% complete`}><span style={{ width: `${flowRun.progress}%` }} /></div>{backgroundNote}</footer>
   </div>;
 }
 

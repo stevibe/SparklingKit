@@ -389,6 +389,7 @@ textarea.input { @apply text-[16px]; resize: vertical; }
 .processing-steps { @apply mt-5 flex justify-between border-t border-[#d7dde6] pt-4 text-[14px] font-bold tracking-wide text-[#90959c] uppercase; }
 .processing-steps .done { @apply text-[#137333]; }
 .processing-steps .active { @apply text-[#0b57d0]; }
+.processing-view > .processing-background-note { @apply mt-5 border-t border-[#303640] pt-4 text-[13px] leading-5 text-muted; }
 
 .workflow-processing-view { @apply flex min-h-[620px] flex-1 flex-col bg-[#090b0e]; }
 .file-workspace.workflow-run-workspace { grid-template-columns: minmax(0, 1fr); }
@@ -440,6 +441,7 @@ textarea.input { @apply text-[16px]; resize: vertical; }
 .workflow-status-summary .status-blocked i { @apply bg-[#e7cf72]; }
 .workflow-progress-track { @apply h-1.5 overflow-hidden rounded-full bg-[#292e35]; }
 .workflow-progress-track > span { @apply block h-full rounded-full bg-[#e8eaed] transition-[width] duration-500; }
+.workflow-processing-view .processing-background-note { @apply mt-3 text-[12px] leading-5 text-muted; }
 
 @media (prefers-reduced-motion: reduce) {
   .workflow-status-node.status-running::before { animation: none; }
