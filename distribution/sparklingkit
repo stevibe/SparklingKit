@@ -149,7 +149,7 @@ case "${1:-help}" in
     fi
     printf 'Pulling the configured SparklingKit and Redis releases...\n'
     "${COMPOSE[@]}" pull
-    "${COMPOSE[@]}" up -d --remove-orphans
+    "${COMPOSE[@]}" up -d
     wait_until_ready
     printf 'Upgrade complete. Your data remained in %s/data.\n' "$PROJECT_DIR"
     show_addresses

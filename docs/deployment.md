@@ -96,7 +96,13 @@ If the six-model reference stack was installed on a DGX Spark with the hosted mo
 ./sparklingkit-dgx update
 ```
 
-This verifies the latest DGX bundle, rebuilds changed service adapters, refreshes pulled images, and checks every model endpoint without replacing model data. See [DGX Spark reference deployment](dgx-spark.md#operations) for rollback and legacy-installation instructions.
+This verifies the latest DGX bundle, stops the complete model stack, rebuilds changed service adapters, refreshes pulled images, and then starts and checks every model endpoint sequentially without replacing model data. Interrupted updates are recovered to the prior stack before another change is attempted. See [DGX Spark reference deployment](dgx-spark.md#operations) for rollback and legacy-installation instructions.
+
+Version 0.1.3 and earlier must first bootstrap the current verified lifecycle manager. From the existing DGX stack directory, run:
+
+```bash
+curl -fsSL https://run.sparklingkit.com/dgx/stable/install.sh | bash -s -- --update --dir "$PWD"
+```
 
 ## Roll back the application image
 

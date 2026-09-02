@@ -14,6 +14,8 @@ fi
 RELEASE_BASE_URL="${SPARKLINGKIT_DGX_RELEASE_URL:-https://run.sparklingkit.com/dgx/stable}"
 VERSION_FILE="$PROJECT_DIR/.sparklingkit-dgx-version"
 BACKUP_DIR="$PROJECT_DIR/.previous-dgx-stack"
+ROLLBACK_SNAPSHOT_DIR="$PROJECT_DIR/.rollback-current-dgx-stack"
+TRANSACTION_FILE="$PROJECT_DIR/.sparklingkit-dgx-transaction"
 LOCK_DIR="$PROJECT_DIR/.sparklingkit-dgx-update.lock"
 ACTIVE_UPDATE_TEMP=""
 MANAGED_PATHS=(
@@ -45,6 +47,7 @@ Update options:
   --accept-model-licenses    Confirm review of the model publishers' terms
 
 All model weights, runtime caches, and outputs remain under ./data.
+An interrupted change is recovered before the next update or rollback runs.
 EOF
 }
 
@@ -144,35 +147,45 @@ replace_path() {
   fi
 }
 
-create_backup() {
-  local next_backup="$PROJECT_DIR/.previous-dgx-stack.next"
+snapshot_stack() {
+  local destination="$1"
   local path
-  rm -rf -- "$next_backup"
-  mkdir -p "$next_backup"
+  rm -rf -- "$destination"
+  mkdir -p "$destination"
   for path in "${MANAGED_PATHS[@]}"; do
     if [[ -e "$PROJECT_DIR/$path" ]]; then
-      mkdir -p "$next_backup/$(dirname "$path")"
-      cp -a "$PROJECT_DIR/$path" "$next_backup/$path"
+      mkdir -p "$destination/$(dirname "$path")"
+      cp -a "$PROJECT_DIR/$path" "$destination/$path"
     fi
   done
+}
+
+create_backup() {
+  local next_backup="$PROJECT_DIR/.previous-dgx-stack.next"
+  snapshot_stack "$next_backup"
   rm -rf -- "$BACKUP_DIR"
   mv "$next_backup" "$BACKUP_DIR"
 }
 
-restore_backup() {
+restore_snapshot() {
+  local source_dir="$1"
   local path
-  if [[ ! -d "$BACKUP_DIR" ]]; then
-    printf 'No previous DGX stack was recorded.\n' >&2
-    return 1
-  fi
   for path in "${MANAGED_PATHS[@]}"; do
-    if [[ -e "$BACKUP_DIR/$path" ]]; then
-      replace_path "$BACKUP_DIR/$path" "$PROJECT_DIR/$path"
+    if [[ -e "$source_dir/$path" ]]; then
+      replace_path "$source_dir/$path" "$PROJECT_DIR/$path"
     elif [[ "$path" != "sparklingkit-dgx" ]]; then
       rm -rf -- "$PROJECT_DIR/$path"
     fi
   done
   chmod +x "$PROJECT_DIR/sparklingkit-dgx" "$PROJECT_DIR/scripts/start-dgx-models.sh" "$PROJECT_DIR/scripts/start-dgx-spark.sh"
+}
+
+restore_backup() {
+  if [[ ! -d "$BACKUP_DIR" ]]; then
+    printf 'No previous DGX stack was recorded.\n' >&2
+    return 1
+  fi
+  restore_snapshot "$BACKUP_DIR"
 }
 
 download_release() {
@@ -198,8 +211,116 @@ run_stack() {
   "$PROJECT_DIR/scripts/start-dgx-models.sh" "$@"
 }
 
+stop_stack_for_change() {
+  printf 'Stopping all DGX model services before changing the stack...\n'
+  if run_stack stop; then
+    return 0
+  fi
+  printf 'Could not stop every DGX model service. No stack files were replaced.\n' >&2
+  return 1
+}
+
+start_restored_stack() {
+  local start_script="$PROJECT_DIR/scripts/start-dgx-spark.sh"
+  if grep -q -- '--skip-pull' "$start_script" && grep -q -- '--force-recreate' "$start_script"; then
+    run_stack start --skip-download --skip-pull --force-recreate
+  else
+    printf 'The restored stack uses the legacy lifecycle interface; reusing its existing images.\n'
+    run_stack start --skip-download --skip-build
+  fi
+}
+
+restore_and_restart() {
+  run_stack stop || printf 'Some updated services were already stopped or unavailable during recovery.\n' >&2
+  restore_backup
+  start_restored_stack
+}
+
+acquire_change_lock() {
+  local lock_pid=""
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    printf '%s\n' "$$" > "$LOCK_DIR/pid"
+    return 0
+  fi
+  if [[ -r "$LOCK_DIR/pid" ]]; then
+    lock_pid="$(tr -d '[:space:]' < "$LOCK_DIR/pid")"
+  fi
+  if [[ "$lock_pid" =~ ^[0-9]+$ ]] && kill -0 "$lock_pid" 2>/dev/null; then
+    printf 'Another DGX stack change is already in progress.\n' >&2
+    return 1
+  fi
+  printf 'Removing a stale DGX stack change lock.\n' >&2
+  rm -rf -- "$LOCK_DIR"
+  if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    printf 'Another DGX stack change acquired the lock first.\n' >&2
+    return 1
+  fi
+  printf '%s\n' "$$" > "$LOCK_DIR/pid"
+}
+
+release_change_lock() {
+  local lock_pid=""
+  if [[ -r "$LOCK_DIR/pid" ]]; then
+    lock_pid="$(tr -d '[:space:]' < "$LOCK_DIR/pid")"
+  fi
+  if [[ "$lock_pid" == "$$" ]]; then
+    rm -rf -- "$LOCK_DIR"
+  fi
+}
+
+write_transaction() {
+  local transaction="$1"
+  printf '%s\n' "$transaction" > "$TRANSACTION_FILE.next"
+  mv -f "$TRANSACTION_FILE.next" "$TRANSACTION_FILE"
+}
+
+clear_transaction() {
+  rm -f -- "$TRANSACTION_FILE" "$TRANSACTION_FILE.next"
+}
+
+recover_pending_transaction() {
+  local transaction
+  transaction="$(tr -d '[:space:]' < "$TRANSACTION_FILE")"
+  case "$transaction" in
+    update)
+      printf 'Recovering an interrupted DGX stack update...\n' >&2
+      if restore_and_restart; then
+        clear_transaction
+        printf 'The previous DGX stack was restored. Re-run the requested command when ready.\n' >&2
+        return 0
+      fi
+      ;;
+    rollback)
+      printf 'Recovering an interrupted DGX stack rollback...\n' >&2
+      if [[ -d "$ROLLBACK_SNAPSHOT_DIR" ]]; then
+        run_stack stop || printf 'Some rolled-back services were already stopped or unavailable during recovery.\n' >&2
+        if restore_snapshot "$ROLLBACK_SNAPSHOT_DIR" && start_restored_stack; then
+          clear_transaction
+          rm -rf -- "$ROLLBACK_SNAPSHOT_DIR"
+          printf 'The current DGX stack was restored. Re-run the requested command when ready.\n' >&2
+          return 0
+        fi
+      fi
+      ;;
+    *)
+      printf 'Unknown DGX stack transaction state: %s\n' "$transaction" >&2
+      return 1
+      ;;
+  esac
+  printf 'Automatic transaction recovery failed. The recovery marker was retained.\n' >&2
+  return 1
+}
+
+recover_before_change() {
+  if [[ ! -s "$TRANSACTION_FILE" ]]; then
+    return 0
+  fi
+  recover_pending_transaction || true
+  return 1
+}
+
 update_stack() {
-  local update_args=()
+  local -a update_args=() run_arguments=()
   local argument temp_dir
   for argument in "$@"; do
     case "$argument" in
@@ -211,24 +332,35 @@ update_stack() {
     printf 'This is a Git source checkout. Use git pull, then run ./scripts/start-dgx-models.sh --skip-download.\n' >&2
     return 1
   fi
-  if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-    printf 'Another DGX stack update is already in progress.\n' >&2
+  if ! acquire_change_lock; then return 1; fi
+  if ! recover_before_change; then
+    release_change_lock
     return 1
   fi
   temp_dir="$(mktemp -d "$PROJECT_DIR/.dgx-update.XXXXXX")"
   ACTIVE_UPDATE_TEMP="$temp_dir"
   cleanup_update() {
     if [[ -n "${ACTIVE_UPDATE_TEMP:-}" ]]; then rm -rf -- "$ACTIVE_UPDATE_TEMP"; fi
-    rmdir "$LOCK_DIR" 2>/dev/null || true
+    release_change_lock
   }
   trap cleanup_update EXIT
 
   printf 'Downloading and verifying the latest DGX stack...\n'
   if ! download_release "$temp_dir"; then return 1; fi
   create_backup
+  write_transaction update
+  if ! stop_stack_for_change; then
+    if start_restored_stack; then clear_transaction; fi
+    return 1
+  fi
   if ! copy_tree "$temp_dir/release" "$PROJECT_DIR"; then
     printf 'Could not install the new stack files. Restoring the previous release...\n' >&2
-    restore_backup || true
+    if restore_and_restart; then
+      clear_transaction
+      printf 'The previous DGX stack was restored and restarted.\n' >&2
+    else
+      printf 'The previous files could not be restarted automatically.\n' >&2
+    fi
     return 1
   fi
 
@@ -239,13 +371,14 @@ update_stack() {
     run_arguments=(start --refresh-images)
   fi
   if run_stack "${run_arguments[@]}"; then
+    clear_transaction
     printf 'DGX stack update complete: %s. Model data remained in %s/data.\n' "$(installed_version)" "$PROJECT_DIR"
     return 0
   fi
 
   printf 'The updated stack did not become healthy. Restoring the previous release...\n' >&2
-  restore_backup
-  if run_stack start --skip-download --skip-pull --force-recreate; then
+  if restore_and_restart; then
+    clear_transaction
     printf 'The previous DGX stack was restored and restarted.\n' >&2
   else
     printf 'The previous files were restored, but one or more services require manual recovery.\n' >&2
@@ -254,15 +387,56 @@ update_stack() {
 }
 
 rollback_stack() {
-  local current_version
-  current_version="$(installed_version)"
-  restore_backup
-  if run_stack start --skip-download --skip-pull --force-recreate; then
-    printf 'Rolled back DGX stack %s to %s. Model data was unchanged.\n' "$current_version" "$(installed_version)"
-  else
-    printf 'Previous files were restored, but one or more services require manual recovery.\n' >&2
+  local current_version next_snapshot
+  if ! acquire_change_lock; then return 1; fi
+  cleanup_rollback() {
+    release_change_lock
+  }
+  trap cleanup_rollback EXIT
+  if ! recover_before_change; then return 1; fi
+  if [[ ! -d "$BACKUP_DIR" ]]; then
+    printf 'No previous DGX stack was recorded.\n' >&2
     return 1
   fi
+  current_version="$(installed_version)"
+  next_snapshot="$ROLLBACK_SNAPSHOT_DIR.next"
+  snapshot_stack "$next_snapshot"
+  rm -rf -- "$ROLLBACK_SNAPSHOT_DIR"
+  mv "$next_snapshot" "$ROLLBACK_SNAPSHOT_DIR"
+  write_transaction rollback
+  if ! stop_stack_for_change; then
+    if start_restored_stack; then
+      clear_transaction
+      rm -rf -- "$ROLLBACK_SNAPSHOT_DIR"
+    fi
+    return 1
+  fi
+  if ! restore_backup; then
+    printf 'Could not restore the previous stack files. Restoring the current release...\n' >&2
+    if restore_snapshot "$ROLLBACK_SNAPSHOT_DIR" && start_restored_stack; then
+      clear_transaction
+      rm -rf -- "$ROLLBACK_SNAPSHOT_DIR"
+    fi
+    return 1
+  fi
+  if start_restored_stack; then
+    printf 'Rolled back DGX stack %s to %s. Model data was unchanged.\n' "$current_version" "$(installed_version)"
+    clear_transaction
+    rm -rf -- "$ROLLBACK_SNAPSHOT_DIR"
+    return 0
+  fi
+
+  printf 'The previous stack did not become healthy. Restoring the current release...\n' >&2
+  run_stack stop || printf 'Some rolled-back services were already stopped or unavailable during recovery.\n' >&2
+  restore_snapshot "$ROLLBACK_SNAPSHOT_DIR"
+  if start_restored_stack; then
+    clear_transaction
+    rm -rf -- "$ROLLBACK_SNAPSHOT_DIR"
+    printf 'The rollback was cancelled and DGX stack %s was restarted.\n' "$current_version" >&2
+  else
+    printf 'The rollback target failed and the current release requires manual recovery.\n' >&2
+  fi
+  return 1
 }
 
 show_versions() {
@@ -280,10 +454,23 @@ show_versions() {
 action="${1:-help}"
 if (($#)); then shift; fi
 case "$action" in
-  start) exec "$PROJECT_DIR/scripts/start-dgx-models.sh" start "$@" ;;
+  start)
+    if [[ -s "$TRANSACTION_FILE" ]]; then
+      printf 'An interrupted DGX stack change must be recovered first. Run update or rollback once to recover it, then re-run start.\n' >&2
+      exit 1
+    fi
+    exec "$PROJECT_DIR/scripts/start-dgx-models.sh" start "$@"
+    ;;
   update|upgrade) update_stack "$@" ;;
   rollback) rollback_stack ;;
-  status) run_stack status; printf '\n'; show_versions ;;
+  status)
+    run_stack status
+    printf '\n'
+    show_versions
+    if [[ -s "$TRANSACTION_FILE" ]]; then
+      printf '\nRecovery required: an interrupted %s is recorded.\n' "$(tr -d '[:space:]' < "$TRANSACTION_FILE")" >&2
+    fi
+    ;;
   stop) exec "$PROJECT_DIR/scripts/start-dgx-models.sh" stop "$@" ;;
   version) show_versions ;;
   help|-h|--help) usage ;;

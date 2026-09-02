@@ -15,7 +15,7 @@ services. The application itself is not installed on this machine.
 
 Installer options:
   --dir PATH                 Installation directory (default: ./sparklingkit-dgx)
-  --update                   Upgrade an existing hosted installation in place
+  --update                   Bootstrap the latest updater, then upgrade in place
   -h, --help                 Show this help
 
 Model-stack options are passed through, including:
@@ -64,7 +64,7 @@ trap 'rm -rf "$temp_dir"' EXIT
 if [[ -e "$INSTALL_DIR/scripts/start-dgx-models.sh" ]]; then
   if [[ "$UPDATE_EXISTING" != "true" ]]; then
     if [[ -x "$INSTALL_DIR/sparklingkit-dgx" ]]; then
-      printf 'A DGX stack already exists at %s. Run ./sparklingkit-dgx update there.\n' "$INSTALL_DIR" >&2
+      printf 'A DGX stack already exists at %s. Re-run this installer with --update to bootstrap the latest verified updater first.\n' "$INSTALL_DIR" >&2
     else
       printf 'A legacy DGX stack exists at %s. Re-run this installer with --update to add the updater and refresh it safely.\n' "$INSTALL_DIR" >&2
     fi
@@ -78,6 +78,10 @@ if [[ -e "$INSTALL_DIR/scripts/start-dgx-models.sh" ]]; then
   actual_manager="$(sha256sum "$temp_dir/sparklingkit-dgx" | awk '{print $1}')"
   if [[ -z "$expected_manager" || "$actual_manager" != "$expected_manager" ]]; then
     printf 'DGX updater checksum verification failed. No local files were replaced.\n' >&2
+    exit 1
+  fi
+  if ! bash -n "$temp_dir/sparklingkit-dgx"; then
+    printf 'DGX updater syntax validation failed. No local files were replaced.\n' >&2
     exit 1
   fi
   chmod +x "$temp_dir/sparklingkit-dgx"

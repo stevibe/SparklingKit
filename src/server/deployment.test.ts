@@ -29,6 +29,20 @@ describe("DGX Spark model images", () => {
     expect(runSiteWorkflow).toContain("release-assets/sparklingkit-dgx release-assets/sparklingkit-dgx-stack.tar.gz");
     expect(runSiteWorkflow).not.toContain("- .github/workflows/publish-run-site.yml");
     expect(installer).toContain("exec ./sparklingkit-dgx update");
+    expect(installer).toContain('bash -n "$temp_dir/sparklingkit-dgx"');
     expect(manager).toContain("run_arguments=(start --refresh-images");
+    expect(manager).toContain("write_transaction update");
+    expect(manager).toContain("write_transaction rollback");
+  });
+});
+
+describe("SparklingKit application updates", () => {
+  it("does not remove containers managed by the separate DGX model stack", async () => {
+    const manager = await fs.readFile(
+      new URL("../../distribution/sparklingkit", import.meta.url),
+      "utf8",
+    );
+
+    expect(manager).not.toContain("--remove-orphans");
   });
 });

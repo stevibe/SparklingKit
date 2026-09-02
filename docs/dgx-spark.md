@@ -101,22 +101,22 @@ Hosted installations include a lifecycle command in the `sparklingkit-dgx` direc
 ./sparklingkit-dgx version
 ```
 
-To install a newer reference stack safely:
+For installations created with version 0.1.4 or later, install a newer reference stack safely with:
 
 ```bash
 ./sparklingkit-dgx update
 ```
 
-The updater downloads and verifies the current release bundle before changing local files. It backs up the previous Compose files, service adapters, and lifecycle scripts; leaves `data/` and local `.env` settings untouched; rebuilds changed adapters with refreshed base layers; pulls the pinned upstream service images; recreates services one at a time; and waits for every health endpoint. If the refreshed services fail, the previous stack files are restored and restarted automatically. The manual fallback is:
+The updater downloads and verifies the current release bundle before changing local files. It backs up the previous Compose files, service adapters, and lifecycle scripts; leaves `data/` and local `.env` settings untouched; stops every model service to release unified memory; rebuilds changed adapters with refreshed base layers; pulls the pinned upstream service images; and then starts services one at a time while waiting for every health endpoint. If the refreshed services fail, the updater stops the partial stack before restoring and restarting the previous version. A durable transaction marker also lets the next `update` or `rollback` command recover the prior healthy stack after an interrupted shell, SSH disconnect, or host restart. The recovery command exits after restoring the stack so you can inspect it before running the requested change again. The manual fallback follows the same stop-first sequence:
 
 ```bash
 ./sparklingkit-dgx rollback
 ```
 
-Installations created before the lifecycle command was introduced can bootstrap it with the current hosted installer:
+For version 0.1.3 and earlier, bootstrap the latest verified lifecycle manager before the first stop-first update. Run this from the existing `sparklingkit-dgx` installation directory:
 
 ```bash
-curl -fsSL https://run.sparklingkit.com/dgx/stable/install.sh | bash -s -- --update --dir "$PWD/sparklingkit-dgx"
+curl -fsSL https://run.sparklingkit.com/dgx/stable/install.sh | bash -s -- --update --dir "$PWD"
 ```
 
 Model snapshots with unchanged pinned revisions are reused. If a later stack pins a new revision, the updater downloads it without deleting the previous snapshot. Use `./sparklingkit-dgx update --skip-download` only when you intentionally want to retain the already-installed weights.

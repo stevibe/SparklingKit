@@ -76,7 +76,7 @@ On the first visit, choose one of three tabs:
 
 Choose this when SparklingKit and the six models run on the same DGX Spark. Onboarding provides both the hosted, checksum-verified installer and the GitHub-source command, then verifies all six services through Docker's host gateway before applying anything.
 
-Hosted model-stack installations include `./sparklingkit-dgx update`. It verifies the latest bundle, preserves the model and runtime data under `data/`, rebuilds changed service adapters, refreshes pulled images, checks every endpoint, and restores the previous stack release if startup fails. Application updates remain independent through `./sparklingkit update` in the workspace installation directory.
+Hosted model-stack installations created with version 0.1.4 or later include `./sparklingkit-dgx update`. It verifies the latest bundle, backs up the installed stack, stops every model service, preserves model and runtime data under `data/`, rebuilds changed adapters, refreshes pulled images, and starts each endpoint sequentially. Failed or interrupted changes restore the previous stack before another update is attempted. Version 0.1.3 and earlier should bootstrap the current updater once by following the [DGX Spark operations guide](docs/dgx-spark.md#operations). Application updates remain independent through `./sparklingkit update` in the workspace installation directory.
 
 ### Run models remotely
 

@@ -14,7 +14,12 @@ async function writeExecutable(file: string, content: string) {
   await fs.writeFile(file, content, { mode: 0o755 });
 }
 
-async function writeStack(root: string, version: string, marker: string, startExitCode = 0) {
+async function writeStack(
+  root: string,
+  version: string,
+  marker: string,
+  behavior: { modern?: boolean; start?: number; stop?: number } = {},
+) {
   await fs.mkdir(path.join(root, "services/dgx-models"), { recursive: true });
   await fs.mkdir(path.join(root, "services/dgx-status"), { recursive: true });
   await Promise.all([
@@ -28,13 +33,19 @@ async function writeStack(root: string, version: string, marker: string, startEx
     fs.copyFile(managerSource, path.join(root, "sparklingkit-dgx")),
   ]);
   await fs.chmod(path.join(root, "sparklingkit-dgx"), 0o755);
-  await writeExecutable(path.join(root, "scripts/start-dgx-models.sh"), `#!/usr/bin/env bash\nset -euo pipefail\nROOT="$(cd "$(dirname "${"${BASH_SOURCE[0]}"}")/.." && pwd)"\nprintf '${marker} %s\\n' "$*" >> "$ROOT/run.log"\nexit ${startExitCode}\n`);
-  await writeExecutable(path.join(root, "scripts/start-dgx-spark.sh"), "#!/usr/bin/env bash\nexit 0\n");
+  await writeExecutable(path.join(root, "scripts/start-dgx-models.sh"), `#!/usr/bin/env bash\nset -euo pipefail\nROOT="$(cd "$(dirname "${"${BASH_SOURCE[0]}"}")/.." && pwd)"\nprintf '${marker} %s\\n' "$*" >> "$ROOT/run.log"\ncase "${"${1:-start}"}" in\n  start) exit ${behavior.start ?? 0} ;;\n  stop) exit ${behavior.stop ?? 0} ;;\n  *) exit 0 ;;\nesac\n`);
+  const lifecycleOptions = behavior.modern === false ? "" : "# --skip-pull\n# --force-recreate\n";
+  await writeExecutable(path.join(root, "scripts/start-dgx-spark.sh"), `#!/usr/bin/env bash\n${lifecycleOptions}exit 0\n`);
 }
 
-async function createRelease(endpoint: string, version: string, marker: string, startExitCode = 0) {
+async function createRelease(
+  endpoint: string,
+  version: string,
+  marker: string,
+  behavior: { modern?: boolean; start?: number; stop?: number } = {},
+) {
   const tree = path.join(endpoint, "tree");
-  await writeStack(tree, version, marker, startExitCode);
+  await writeStack(tree, version, marker, behavior);
   const bundle = path.join(endpoint, "sparklingkit-dgx-stack.tar.gz");
   await execFile("tar", ["-czf", bundle, "-C", tree, "."]);
   const digest = createHash("sha256").update(await fs.readFile(bundle)).digest("hex");
@@ -71,11 +82,14 @@ describe("hosted DGX stack updates", () => {
     expect(await fs.readFile(path.join(project, ".sparklingkit-dgx-version"), "utf8")).toBe("0.1.2\n");
     expect(await fs.readFile(path.join(project, "data/dgx-models/keep-me"), "utf8")).toBe("model data\n");
     expect(await fs.readFile(path.join(project, ".previous-dgx-stack/compose.dgx.yaml"), "utf8")).toBe("old dgx\n");
-    expect(await fs.readFile(path.join(project, "run.log"), "utf8")).toContain("new start --refresh-images");
+    expect((await fs.readFile(path.join(project, "run.log"), "utf8")).trim().split("\n")).toEqual([
+      "old stop",
+      "new start --refresh-images",
+    ]);
   });
 
   it("restores the previous stack when refreshed services fail", async () => {
-    await createRelease(endpoint, "0.1.2", "broken", 1);
+    await createRelease(endpoint, "0.1.2", "broken", { start: 1 });
     await expect(execFile("bash", [path.join(project, "sparklingkit-dgx"), "update"], {
       env: { ...process.env, SPARKLINGKIT_DGX_RELEASE_URL: `file://${endpoint}` },
     })).rejects.toThrow();
@@ -84,11 +98,15 @@ describe("hosted DGX stack updates", () => {
     expect(await fs.readFile(path.join(project, ".sparklingkit-dgx-version"), "utf8")).toBe("0.1.1\n");
     expect(await fs.readFile(path.join(project, "data/dgx-models/keep-me"), "utf8")).toBe("model data\n");
     const log = await fs.readFile(path.join(project, "run.log"), "utf8");
-    expect(log).toContain("broken start --refresh-images");
-    expect(log).toContain("old start --skip-download --skip-pull --force-recreate");
+    expect(log.trim().split("\n")).toEqual([
+      "old stop",
+      "broken start --refresh-images",
+      "broken stop",
+      "old start --skip-download --skip-pull --force-recreate",
+    ]);
   });
 
-  it("supports an explicit rollback after a healthy update", async () => {
+  it("supports update, explicit rollback, and update again", async () => {
     await createRelease(endpoint, "0.1.2", "new");
     const environment = { ...process.env, SPARKLINGKIT_DGX_RELEASE_URL: `file://${endpoint}` };
     await execFile("bash", [path.join(project, "sparklingkit-dgx"), "update"], { env: environment });
@@ -97,6 +115,56 @@ describe("hosted DGX stack updates", () => {
     expect(await fs.readFile(path.join(project, "compose.dgx.yaml"), "utf8")).toBe("old dgx\n");
     expect(await fs.readFile(path.join(project, ".sparklingkit-dgx-version"), "utf8")).toBe("0.1.1\n");
     expect(await fs.readFile(path.join(project, "data/dgx-models/keep-me"), "utf8")).toBe("model data\n");
+
+    await execFile("bash", [path.join(project, "sparklingkit-dgx"), "update"], { env: environment });
+    expect(await fs.readFile(path.join(project, "compose.dgx.yaml"), "utf8")).toBe("new dgx\n");
+    expect(await fs.readFile(path.join(project, ".sparklingkit-dgx-version"), "utf8")).toBe("0.1.2\n");
+    expect((await fs.readFile(path.join(project, "run.log"), "utf8")).trim().split("\n")).toEqual([
+      "old stop",
+      "new start --refresh-images",
+      "new stop",
+      "old start --skip-download --skip-pull --force-recreate",
+      "old stop",
+      "new start --refresh-images",
+    ]);
+  });
+
+  it("does not replace stack files when the running services cannot stop", async () => {
+    await writeStack(project, "0.1.1", "old", { stop: 1 });
+    await createRelease(endpoint, "0.1.2", "new");
+    await expect(execFile("bash", [path.join(project, "sparklingkit-dgx"), "update"], {
+      env: { ...process.env, SPARKLINGKIT_DGX_RELEASE_URL: `file://${endpoint}` },
+    })).rejects.toThrow();
+
+    expect(await fs.readFile(path.join(project, "compose.dgx.yaml"), "utf8")).toBe("old dgx\n");
+    expect(await fs.readFile(path.join(project, ".sparklingkit-dgx-version"), "utf8")).toBe("0.1.1\n");
+    expect((await fs.readFile(path.join(project, "run.log"), "utf8")).trim().split("\n")).toEqual([
+      "old stop",
+      "old start --skip-download --skip-pull --force-recreate",
+    ]);
+    await expect(fs.stat(path.join(project, ".sparklingkit-dgx-transaction"))).rejects.toThrow();
+  });
+
+  it("restores the current release when the rollback target cannot start", async () => {
+    await writeStack(project, "0.1.1", "old", { start: 1 });
+    await createRelease(endpoint, "0.1.2", "new");
+    const environment = { ...process.env, SPARKLINGKIT_DGX_RELEASE_URL: `file://${endpoint}` };
+    await execFile("bash", [path.join(project, "sparklingkit-dgx"), "update"], { env: environment });
+    await expect(execFile("bash", [path.join(project, "sparklingkit-dgx"), "rollback"], {
+      env: environment,
+    })).rejects.toThrow();
+
+    expect(await fs.readFile(path.join(project, "compose.dgx.yaml"), "utf8")).toBe("new dgx\n");
+    expect(await fs.readFile(path.join(project, ".sparklingkit-dgx-version"), "utf8")).toBe("0.1.2\n");
+    expect(await fs.readFile(path.join(project, "data/dgx-models/keep-me"), "utf8")).toBe("model data\n");
+    expect((await fs.readFile(path.join(project, "run.log"), "utf8")).trim().split("\n")).toEqual([
+      "old stop",
+      "new start --refresh-images",
+      "new stop",
+      "old start --skip-download --skip-pull --force-recreate",
+      "old stop",
+      "new start --skip-download --skip-pull --force-recreate",
+    ]);
   });
 
   it("rejects a bundle with a mismatched checksum before replacing files", async () => {
@@ -108,5 +176,71 @@ describe("hosted DGX stack updates", () => {
 
     expect(await fs.readFile(path.join(project, "compose.dgx.yaml"), "utf8")).toBe("old dgx\n");
     await expect(fs.stat(path.join(project, ".previous-dgx-stack"))).rejects.toThrow();
+  });
+
+  it("recovers an interrupted update before allowing another change", async () => {
+    await writeStack(path.join(project, ".previous-dgx-stack"), "0.1.1", "old");
+    await writeStack(project, "0.1.2", "partial");
+    await fs.writeFile(path.join(project, ".sparklingkit-dgx-transaction"), "update\n");
+
+    await expect(execFile("bash", [path.join(project, "sparklingkit-dgx"), "update"], {
+      env: { ...process.env, SPARKLINGKIT_DGX_RELEASE_URL: `file://${endpoint}` },
+    })).rejects.toThrow();
+
+    expect(await fs.readFile(path.join(project, "compose.dgx.yaml"), "utf8")).toBe("old dgx\n");
+    expect(await fs.readFile(path.join(project, ".sparklingkit-dgx-version"), "utf8")).toBe("0.1.1\n");
+    expect((await fs.readFile(path.join(project, "run.log"), "utf8")).trim().split("\n")).toEqual([
+      "partial stop",
+      "old start --skip-download --skip-pull --force-recreate",
+    ]);
+    await expect(fs.stat(path.join(project, ".sparklingkit-dgx-transaction"))).rejects.toThrow();
+    await expect(fs.stat(path.join(project, ".sparklingkit-dgx-update.lock"))).rejects.toThrow();
+  });
+
+  it("recovers the current release after an interrupted rollback", async () => {
+    await writeStack(path.join(project, ".rollback-current-dgx-stack"), "0.1.2", "current");
+    await writeStack(project, "0.1.1", "partial");
+    await fs.writeFile(path.join(project, ".sparklingkit-dgx-transaction"), "rollback\n");
+
+    await expect(execFile("bash", [path.join(project, "sparklingkit-dgx"), "rollback"])).rejects.toThrow();
+
+    expect(await fs.readFile(path.join(project, "compose.dgx.yaml"), "utf8")).toBe("current dgx\n");
+    expect(await fs.readFile(path.join(project, ".sparklingkit-dgx-version"), "utf8")).toBe("0.1.2\n");
+    expect((await fs.readFile(path.join(project, "run.log"), "utf8")).trim().split("\n")).toEqual([
+      "partial stop",
+      "current start --skip-download --skip-pull --force-recreate",
+    ]);
+    await expect(fs.stat(path.join(project, ".sparklingkit-dgx-transaction"))).rejects.toThrow();
+    await expect(fs.stat(path.join(project, ".rollback-current-dgx-stack"))).rejects.toThrow();
+  });
+
+  it("removes a stale change lock before updating", async () => {
+    await createRelease(endpoint, "0.1.2", "new");
+    const lockDirectory = path.join(project, ".sparklingkit-dgx-update.lock");
+    await fs.mkdir(lockDirectory);
+    await fs.writeFile(path.join(lockDirectory, "pid"), "999999999\n");
+
+    await execFile("bash", [path.join(project, "sparklingkit-dgx"), "update"], {
+      env: { ...process.env, SPARKLINGKIT_DGX_RELEASE_URL: `file://${endpoint}` },
+    });
+
+    expect(await fs.readFile(path.join(project, ".sparklingkit-dgx-version"), "utf8")).toBe("0.1.2\n");
+    await expect(fs.stat(lockDirectory)).rejects.toThrow();
+  });
+
+  it("uses the legacy no-build start mode when restoring an older stack", async () => {
+    await writeStack(project, "0.1.1", "legacy", { modern: false });
+    await createRelease(endpoint, "0.1.2", "broken", { start: 1 });
+
+    await expect(execFile("bash", [path.join(project, "sparklingkit-dgx"), "update"], {
+      env: { ...process.env, SPARKLINGKIT_DGX_RELEASE_URL: `file://${endpoint}` },
+    })).rejects.toThrow();
+
+    expect((await fs.readFile(path.join(project, "run.log"), "utf8")).trim().split("\n")).toEqual([
+      "legacy stop",
+      "broken start --refresh-images",
+      "broken stop",
+      "legacy start --skip-download --skip-build",
+    ]);
   });
 });
