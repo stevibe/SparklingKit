@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$PWD"
+if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
 INSTALL_DIR="${SPARKLINGKIT_INSTALL_DIR:-$PWD/sparklingkit}"
 ASSET_BASE_URL="${SPARKLINGKIT_ASSET_BASE_URL:-https://run.sparklingkit.com/stable}"
 FROM_SOURCE=false
