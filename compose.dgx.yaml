@@ -228,7 +228,7 @@ services:
   hy-mt2:
     build:
       context: ./services/dgx-models/hy-mt2
-    image: sparklingkit/hy-mt2-1.8b-fp8:transformers-5.5.3
+    image: sparklingkit/hy-mt2-1.8b-fp8:transformers-5.6.0
     container_name: sparklingkit-hy-mt2
     restart: unless-stopped
     network_mode: host

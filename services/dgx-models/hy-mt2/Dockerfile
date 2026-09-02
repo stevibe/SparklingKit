@@ -12,7 +12,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 RUN PIP_CONSTRAINT= python3 -m pip install --no-cache-dir --upgrade \
-    "transformers==5.5.3" \
+    "transformers==5.6.0" \
     "accelerate==1.14.0" \
     "loguru==0.7.3" \
     "fastapi==0.124.4" \
