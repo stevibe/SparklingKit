@@ -1368,7 +1368,7 @@ body { background: radial-gradient(circle at 72% -15%, rgba(53, 82, 125, .16), t
 .file-type-mindmap { background: #18302d; color: #8dd8cd; }
 
 /* Interactive mind maps */
-.mindmap-viewer { @apply mx-auto flex min-h-[680px] w-full max-w-[1500px] flex-col overflow-hidden rounded-[14px] border border-[#303640] bg-[#101216]; box-shadow: 0 5px 18px rgba(0,0,0,.3); }
+.mindmap-viewer { @apply mx-auto flex min-h-[860px] w-full max-w-[1500px] flex-col overflow-hidden rounded-[14px] border border-[#303640] bg-[#101216]; box-shadow: 0 5px 18px rgba(0,0,0,.3); }
 .mindmap-viewer > header { @apply flex min-h-18 shrink-0 items-center justify-between gap-4 border-b border-[#303640] bg-[#15181d] px-5 py-3; }
 .mindmap-viewer > header > div { @apply flex min-w-0 items-center gap-3; }
 .mindmap-viewer > header > div > span:last-child { @apply min-w-0; }
@@ -1378,7 +1378,7 @@ body { background: radial-gradient(circle at 72% -15%, rgba(53, 82, 125, .16), t
 .mindmap-viewer > header > button { @apply inline-flex min-h-9 shrink-0 items-center gap-2 rounded-full border border-[#3a414a] px-3.5 text-[13px] font-bold text-[#cbd0d6] transition hover:bg-[#252a31] hover:text-white; }
 .mindmap-viewer-icon { @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] bg-[#18302d] text-[#8dd8cd]; }
 .mindmap-canvas { @apply relative min-h-0 flex-1; }
-.mindmap-canvas > .react-flow { @apply h-full min-h-[610px]; }
+.mindmap-canvas > .react-flow { @apply h-full min-h-[790px]; }
 .mindmap-canvas .react-flow__controls { @apply overflow-hidden rounded-[11px] border border-[#343a43] bg-[#171a1f]; box-shadow: 0 6px 20px rgba(0,0,0,.35); }
 .mindmap-canvas .react-flow__controls-button { @apply border-[#343a43] bg-[#171a1f] fill-[#d5d9de] text-[#d5d9de] hover:bg-[#252a31]; }
 .mindmap-canvas-hint { @apply pointer-events-none absolute right-4 bottom-3 rounded-full bg-[#0b0d10]/85 px-3 py-1.5 text-[11px] font-semibold text-muted; }

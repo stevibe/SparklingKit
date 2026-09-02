@@ -2,26 +2,1237 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Run SparklingKit</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#090a0c" />
+    <meta name="description" content="Open-source AI workbench for your own hardware. Transcribe, OCR, translate, chat, generate images and mind maps with six local models, visual workflows, and everything stored as plain files. Built for unified-memory machines like NVIDIA DGX Spark." />
+    <meta property="og:title" content="SparklingKit | Private, self-hosted AI workbench" />
+    <meta property="og:description" content="Transcription, OCR, translation, chat, image generation, mind maps, and visual workflows on hardware you control." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://www.sparklingkit.com/" />
+    <link rel="canonical" href="https://www.sparklingkit.com/" />
+    <link rel="icon" href="data:," />
+    <title>SparklingKit | Private, self-hosted AI workbench: OCR, transcription, translation &amp; more</title>
     <style>
-      :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #090a0c; color: #f1f3f5; }
-      body { margin: 0; min-height: 100vh; display: grid; place-items: center; }
-      main { width: min(720px, calc(100vw - 40px)); }
-      h1 { margin: 0; font-size: clamp(2.5rem, 7vw, 4.75rem); letter-spacing: -.055em; }
-      p { color: #a4abb5; font-size: 1.05rem; line-height: 1.7; }
-      pre { overflow-x: auto; border: 1px solid #303640; border-radius: 14px; background: #121519; padding: 18px; color: #eef0f2; }
-      a { color: #d3c4e4; }
+      @font-face {
+        font-family: "Manrope Variable";
+        font-style: normal;
+        font-display: swap;
+        font-weight: 200 800;
+        src: url("https://cdn.jsdelivr.net/npm/@fontsource-variable/manrope@5.3.0/files/manrope-latin-wght-normal.woff2") format("woff2-variations");
+      }
+
+      @font-face {
+        font-family: "Inter Variable";
+        font-style: normal;
+        font-display: swap;
+        font-weight: 100 900;
+        src: url("https://cdn.jsdelivr.net/npm/@fontsource-variable/inter@5.3.0/files/inter-latin-wght-normal.woff2") format("woff2-variations");
+      }
+
+      :root {
+        color-scheme: dark;
+        font-synthesis: none;
+        --canvas: #090a0c;
+        --surface: #111419;
+        --surface-raised: #171b20;
+        --line: rgba(255, 255, 255, 0.11);
+        --line-strong: rgba(255, 255, 255, 0.19);
+        --ink: #f1f3f4;
+        --muted: #a5acb5;
+        --faint: #767e89;
+        --purple: #b69adc;
+        --teal: #76d7c2;
+        --blue: #9dc7ed;
+        --green: #5ee2aa;
+        --max: 1180px;
+      }
+
+      * { box-sizing: border-box; }
+      html { min-width: 320px; scroll-behavior: smooth; background: var(--canvas); }
+      body {
+        min-width: 320px;
+        min-height: 100%;
+        margin: 0;
+        overflow-x: hidden;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: geometricPrecision;
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        z-index: 0;
+        inset: -26vmax;
+        pointer-events: none;
+        background:
+          radial-gradient(circle at 18% 19%, rgba(116, 75, 162, 0.34) 0, rgba(116, 75, 162, 0.08) 22%, transparent 42%),
+          radial-gradient(circle at 82% 20%, rgba(29, 113, 143, 0.28) 0, rgba(29, 113, 143, 0.07) 25%, transparent 45%),
+          radial-gradient(circle at 65% 82%, rgba(30, 126, 100, 0.2) 0, rgba(30, 126, 100, 0.05) 26%, transparent 46%),
+          #090a0c;
+        animation: aurora 34s ease-in-out infinite alternate;
+        transform-origin: center;
+        will-change: transform;
+      }
+
+      body::after {
+        content: "";
+        position: fixed;
+        z-index: 0;
+        inset: 0;
+        pointer-events: none;
+        background: radial-gradient(circle at 50% 32%, transparent 10%, rgba(4, 5, 7, 0.18) 55%, rgba(4, 5, 7, 0.7) 100%);
+      }
+
+      @keyframes aurora {
+        0% { transform: translate3d(-2%, -1%, 0) rotate(-1deg) scale(1); }
+        50% { transform: translate3d(2%, 1.5%, 0) rotate(2deg) scale(1.04); }
+        100% { transform: translate3d(-0.5%, 2.5%, 0) rotate(-2deg) scale(1.07); }
+      }
+
+      a { color: inherit; text-decoration: none; }
+      button, a { -webkit-tap-highlight-color: transparent; }
+      button { font: inherit; }
+      code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+      svg { display: block; }
+      .lucide { width: 1em; height: 1em; stroke-width: 1.8; }
+      .inline-icon { width: 15px; height: 15px; flex: 0 0 auto; }
+
+      .page-layer { position: relative; z-index: 1; }
+      .shell { width: min(var(--max), calc(100% - 48px)); margin: 0 auto; }
+      .section { padding: clamp(84px, 9vw, 124px) 0; border-top: 1px solid var(--line); }
+      .section-soft { background: rgba(8, 10, 13, 0.42); backdrop-filter: blur(18px); }
+      .section-deep { background: rgba(5, 6, 8, 0.68); }
+      .eyebrow {
+        margin: 0 0 17px;
+        color: var(--teal);
+        font-size: 12px;
+        font-weight: 760;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+      .display {
+        margin: 0;
+        font-family: "Manrope Variable", "Manrope", ui-sans-serif, system-ui, sans-serif;
+        font-size: clamp(2.45rem, 4.2vw, 4.15rem);
+        font-variation-settings: "wght" 760;
+        font-weight: 760;
+        letter-spacing: -0.055em;
+        line-height: 1.02;
+      }
+      .lead {
+        color: var(--muted);
+        font-size: clamp(1rem, 1.35vw, 1.125rem);
+        line-height: 1.7;
+      }
+      .muted { color: var(--muted); }
+      .gradient-text {
+        background: linear-gradient(100deg, #fff 20%, #d8caeb 55%, #9dd9cf 94%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+
+      .site-header {
+        position: fixed;
+        z-index: 20;
+        top: 0;
+        right: 0;
+        left: 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+        background: rgba(9, 10, 12, 0.76);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+      }
+      .header-inner {
+        display: flex;
+        min-height: 78px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 28px;
+      }
+      .wordmark {
+        font-family: "Manrope Variable", "Manrope", ui-sans-serif, system-ui, sans-serif;
+        font-size: 23px;
+        font-variation-settings: "wght" 800;
+        font-weight: 800;
+        letter-spacing: -0.06em;
+        line-height: 1;
+      }
+      .nav { display: flex; align-items: center; gap: 28px; color: var(--muted); font-size: 13px; font-weight: 650; }
+      .nav a { transition: color 160ms ease; }
+      .nav a:hover { color: #fff; }
+      .header-github {
+        display: inline-flex;
+        min-height: 40px;
+        align-items: center;
+        gap: 8px;
+        padding: 0 14px;
+        border: 1px solid var(--line-strong);
+        border-radius: 12px;
+        background: rgba(16, 19, 23, 0.58);
+        color: #d7dbe0;
+      }
+
+      .hero {
+        display: flex;
+        align-items: center;
+        min-height: 900px;
+        padding: 142px 0 64px;
+      }
+      .hero-grid {
+        display: block;
+      }
+      .hero-copy { max-width: none; }
+      .hero-copy h1 {
+        max-width: none;
+        margin: 0;
+        font-family: "Manrope Variable", "Manrope", ui-sans-serif, system-ui, sans-serif;
+        font-size: clamp(3.4rem, 4.6vw, 4.25rem);
+        font-variation-settings: "wght" 790;
+        font-weight: 790;
+        letter-spacing: -0.065em;
+        line-height: 0.96;
+      }
+      .hero-copy h2 {
+        margin: 14px 0 0;
+        color: #d8dce1;
+        font-family: "Manrope Variable", "Manrope", ui-sans-serif, system-ui, sans-serif;
+        font-size: clamp(1.35rem, 2vw, 1.85rem);
+        font-variation-settings: "wght" 640;
+        font-weight: 640;
+        letter-spacing: -0.04em;
+      }
+      .hero-description {
+        max-width: 780px;
+        margin: 24px 0 0;
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1.68;
+      }
+      .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
+      .hero-after-install { margin-top: 52px; text-align: center; }
+      .hero-after-install .hero-actions { justify-content: center; margin-top: 0; }
+      .button-primary, .button-secondary {
+        display: inline-flex;
+        min-height: 48px;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        padding: 0 19px;
+        border-radius: 13px;
+        font-size: 14px;
+        font-weight: 750;
+        transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+      }
+      .button-primary { background: #f2f3f4; color: #101216; }
+      .button-secondary { border: 1px solid var(--line-strong); background: rgba(17, 20, 25, 0.65); color: #e2e5e8; }
+      .button-primary:hover, .button-secondary:hover { transform: translateY(-2px); }
+      .button-secondary:hover { border-color: rgba(255, 255, 255, 0.32); background: rgba(25, 29, 35, 0.78); }
+      .copy-button {
+        min-width: 66px;
+        min-height: 34px;
+        border: 1px solid var(--line-strong);
+        border-radius: 9px;
+        background: #1a1e24;
+        color: #bec4cc;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 750;
+      }
+      .copy-button.icon-only {
+        display: grid;
+        width: 42px;
+        min-width: 42px;
+        height: 42px;
+        min-height: 42px;
+        padding: 0;
+        place-items: center;
+        border-radius: 11px;
+        transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+      }
+      .copy-button.icon-only:hover { border-color: rgba(255, 255, 255, 0.32); background: #242930; color: #fff; }
+      .copy-button.icon-only .lucide { width: 17px; height: 17px; }
+      .copy-button.icon-only.is-copied { border-color: rgba(94, 226, 170, 0.38); color: var(--green); }
+      .hero-meta { margin-top: 22px !important; color: #737b86 !important; font-size: 12px !important; letter-spacing: 0.025em; }
+
+      .gallery-section {
+        padding: clamp(28px, 4vw, 52px) 0;
+        background: rgba(5, 6, 8, 0.68);
+      }
+      .gallery-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+      .gallery-item {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        padding: 0;
+        overflow: hidden;
+        border: 1px solid var(--line-strong);
+        border-radius: 18px;
+        background: #0d1014;
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+        cursor: zoom-in;
+      }
+      .gallery-item { aspect-ratio: 1.45; }
+      .gallery-item img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 320ms ease, filter 320ms ease;
+      }
+      .gallery-item:hover img { filter: brightness(1.08); transform: scale(1.012); }
+      .gallery-zoom {
+        position: absolute;
+        right: 14px;
+        bottom: 14px;
+        display: grid;
+        width: 36px;
+        height: 36px;
+        place-items: center;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 10px;
+        background: rgba(9, 11, 14, 0.74);
+        color: #e8ebee;
+        backdrop-filter: blur(12px);
+      }
+      .gallery-zoom .lucide { width: 16px; height: 16px; }
+      .gallery-lightbox {
+        width: min(94vw, 1680px);
+        max-width: none;
+        max-height: 94vh;
+        padding: 0;
+        overflow: visible;
+        border: 0;
+        background: transparent;
+        color: var(--ink);
+      }
+      .gallery-lightbox::backdrop { background: rgba(3, 4, 6, 0.88); backdrop-filter: blur(12px); }
+      .lightbox-frame {
+        position: relative;
+        display: grid;
+        min-height: 0;
+        overflow: hidden;
+        border: 1px solid var(--line-strong);
+        border-radius: 18px;
+        background: #080a0d;
+        box-shadow: 0 40px 120px rgba(0, 0, 0, 0.6);
+      }
+      .lightbox-image { display: block; width: 100%; max-height: 90vh; object-fit: contain; }
+      .lightbox-close {
+        position: absolute;
+        z-index: 1;
+        top: 14px;
+        right: 14px;
+        display: grid;
+        width: 42px;
+        height: 42px;
+        padding: 0;
+        place-items: center;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        border-radius: 12px;
+        background: rgba(9, 11, 14, 0.78);
+        color: #fff;
+        cursor: pointer;
+        backdrop-filter: blur(12px);
+      }
+      .lightbox-close .lucide { width: 18px; height: 18px; }
+
+      .install-window {
+        width: 100%;
+        min-width: 0;
+        margin-top: 56px;
+        overflow: hidden;
+        border: 1px solid var(--line-strong);
+        border-radius: 20px;
+        background: rgba(13, 16, 20, 0.9);
+        box-shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
+      }
+      .install-head {
+        display: flex;
+        min-height: 62px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 0 24px;
+        border-bottom: 1px solid var(--line);
+      }
+      .install-title { display: flex; align-items: center; gap: 11px; }
+      .install-title-icon { display: grid; width: 31px; height: 31px; place-items: center; border-radius: 9px; background: #23282f; color: #d9dde2; }
+      .install-title-icon .lucide { width: 16px; height: 16px; }
+      .install-head strong { font-size: 14px; }
+      .install-head > span { color: #7f8893; font-size: 11px; }
+      .install-body { padding: 0; }
+      .install-command { position: relative; display: grid; }
+      .install-code {
+        margin: 0;
+        padding: 27px 86px 27px 25px;
+        border: 0;
+        border-radius: 0;
+        background: #090b0e;
+        color: #d7dce1;
+        font-size: 13px;
+        line-height: 1.85;
+        overflow-wrap: anywhere;
+        white-space: pre-wrap;
+      }
+      .install-copy { position: absolute; top: 50%; right: 23px; margin: 0; transform: translateY(-50%); }
+      .install-followup {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 32px;
+        padding: 20px 24px;
+        border-top: 1px solid var(--line);
+      }
+      .onboarding-note { display: flex; min-width: 0; align-items: flex-start; gap: 13px; }
+      .onboarding-note > .lucide { width: 18px; height: 18px; flex: 0 0 auto; margin-top: 2px; color: var(--teal); }
+      .onboarding-note strong { display: block; font-size: 13px; }
+      .onboarding-note span { display: block; max-width: 700px; margin-top: 5px; color: #818a95; font-size: 12px; line-height: 1.55; }
+      .install-open { flex: 0 0 auto; text-align: right; }
+      .install-open span { display: block; margin-bottom: 5px; color: #818a95; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+      .install-open code { color: #eef0f2; font-size: 12px; }
+
+      .thesis { text-align: center; }
+      .thesis .display { max-width: 1020px; margin: 0 auto; }
+      .thesis .lead { max-width: 820px; margin: 34px auto 0; }
+
+      .section-heading { max-width: 830px; }
+      .section-heading.center { margin: 0 auto; text-align: center; }
+      .section-heading .lead { margin: 26px 0 0; }
+      .section-heading.center .lead { margin-right: auto; margin-left: auto; }
+      .tool-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin-top: 48px; overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: var(--line); }
+      .tool-card {
+        display: flex;
+        flex-direction: column;
+        min-height: 264px;
+        padding: 27px;
+        background: rgba(13, 16, 20, 0.92);
+        transition: background 180ms ease, transform 180ms ease;
+      }
+      .tool-card:hover { position: relative; z-index: 2; background: #15191e; }
+      .tool-card.chat { grid-column: 1 / -1; min-height: 132px; flex-direction: row; align-items: center; }
+      .chat-intro { display: flex; min-width: 0; align-items: center; gap: 18px; }
+      .tool-icon {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        place-items: center;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 12px;
+        background: #242932;
+        color: #e5e8eb;
+        font-size: 18px;
+        font-weight: 650;
+      }
+      .tool-icon .lucide { width: 20px; height: 20px; }
+      .tool-card:nth-child(2) .tool-icon { background: #29271f; }
+      .tool-card:nth-child(3) .tool-icon { background: #282238; }
+      .tool-card:nth-child(4) .tool-icon { background: #19302b; }
+      .tool-card:nth-child(5) .tool-icon { background: #2c2439; }
+      .tool-card:nth-child(6) .tool-icon { background: #1e2d2d; }
+      .tool-card h3 { margin: 27px 0 5px; font-family: "Manrope Variable", sans-serif; font-size: 20px; letter-spacing: -0.035em; }
+      .tool-card.chat h3 { margin: 0 0 4px; }
+      .tool-card > p, .tool-card.chat .chat-copy > p { margin: 0; color: #d8dce1; font-size: 15px; font-weight: 650; line-height: 1.55; }
+      .tool-card ul { margin: auto 0 0; padding: 21px 0 0; color: #858d98; font-size: 13px; line-height: 1.72; list-style: none; }
+      .tool-card li + li { margin-top: 5px; }
+      .tool-card li::before { content: "·"; margin-right: 8px; color: #b3bac3; }
+      .chat ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 22px; margin: 0; }
+
+      .continue-layout, .workflow-layout, .files-layout, .ops-layout, .privacy-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+        gap: clamp(54px, 8vw, 110px);
+        align-items: center;
+      }
+      .continue-layout > *, .workflow-layout > *, .files-layout > *, .ops-layout > *, .privacy-layout > * { min-width: 0; }
+      .signature-copy .lead { margin: 28px 0 0; }
+      .signature-copy .closing { margin: 24px 0 0; color: #dfe2e6; font-size: 15px; font-style: italic; font-weight: 650; line-height: 1.6; }
+      .continue-demo {
+        --action-gap: 11px;
+        --branch-depth: 64px;
+        --branch-offset: -64px;
+        --branch-extra: 7.33px;
+        position: relative;
+        display: grid;
+        grid-template-rows: auto 136px auto;
+        min-height: 470px;
+        padding: 53px 7%;
+        overflow: hidden;
+        border: 1px solid var(--line-strong);
+        border-radius: 24px;
+        background-color: rgba(12, 15, 18, 0.9);
+        background-image: radial-gradient(circle, rgba(104, 113, 124, 0.28) 1px, transparent 1px);
+        background-size: 22px 22px;
+        box-shadow: 0 30px 90px rgba(0, 0, 0, 0.34);
+      }
+      .artifact {
+        position: relative;
+        z-index: 1;
+        grid-row: 1;
+        width: min(330px, 100%);
+        padding: 21px;
+        border: 1px solid #4a5059;
+        border-radius: 17px;
+        background: #191d22;
+        justify-self: center;
+        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.36);
+      }
+      .artifact-head { display: flex; align-items: center; gap: 12px; }
+      .artifact-icon { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 11px; background: #292e35; color: #edf0f2; }
+      .artifact-icon .lucide { width: 19px; height: 19px; }
+      .artifact strong, .artifact small { display: block; }
+      .artifact strong { font-size: 14px; }
+      .artifact small { margin-top: 4px; color: #7d8590; font-size: 11px; }
+      .artifact-lines { margin-top: 17px; }
+      .artifact-lines i { display: block; height: 6px; margin-top: 7px; border-radius: 99px; background: #363d46; }
+      .artifact-lines i:nth-child(2) { width: 84%; }
+      .artifact-lines i:nth-child(3) { width: 62%; }
+      .route-stem {
+        position: relative;
+        z-index: 0;
+        grid-row: 2;
+        grid-column: 1;
+        width: 1px;
+        height: calc(100% - var(--branch-depth));
+        justify-self: center;
+        background: linear-gradient(#4e5661, #6a8f85);
+      }
+      .route-line {
+        position: relative;
+        z-index: 0;
+        grid-row: 2;
+        grid-column: 1;
+        width: calc(66.666% + var(--branch-extra));
+        height: 1px;
+        align-self: end;
+        justify-self: center;
+        background: #54796f;
+        transform: translateY(var(--branch-offset));
+      }
+      .continue-actions { position: relative; z-index: 1; grid-row: 3; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--action-gap); }
+      .continue-action {
+        position: relative;
+        padding: 16px 10px;
+        border: 1px solid #355a52;
+        border-radius: 14px;
+        background: #14231f;
+        text-align: center;
+        animation: action-glow 5.6s ease-in-out infinite;
+      }
+      .continue-action:nth-child(2) { animation-delay: 1.8s; }
+      .continue-action:nth-child(3) { animation-delay: 3.6s; }
+      .continue-action::before { content: ""; position: absolute; top: var(--branch-offset); left: 50%; width: 1px; height: var(--branch-depth); background: #54796f; }
+      .continue-action span { display: block; color: #8ed5c4; font-size: 18px; }
+      .continue-action span .lucide { width: 20px; height: 20px; margin: 0 auto; }
+      .continue-action strong { display: block; margin-top: 8px; font-size: 12px; }
+      .continue-action small { display: block; margin-top: 4px; color: #77958d; font-size: 9px; }
+      @keyframes action-glow {
+        0%, 55%, 100% { border-color: #355a52; box-shadow: none; }
+        15%, 35% { border-color: #6ab5a3; box-shadow: 0 0 28px rgba(85, 185, 160, 0.16); }
+      }
+
+      .workflow-copy .lead { margin: 28px 0 0; }
+      .feature-list { margin: 28px 0 0; padding: 0; list-style: none; }
+      .feature-list li { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); color: #aeb4bc; font-size: 14px; line-height: 1.55; }
+      .feature-list li .lucide { width: 16px; height: 16px; flex: 0 0 auto; margin-top: 3px; color: var(--green); stroke-width: 2.4; }
+      .workflow-canvas {
+        padding: 26px;
+        border: 1px solid var(--line-strong);
+        border-radius: 20px;
+        background-color: #0d1014;
+        box-shadow: 0 30px 90px rgba(0, 0, 0, 0.34);
+      }
+      .workflow-run-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid var(--line);
+      }
+      .workflow-run-head strong { font-size: 13px; }
+      .workflow-run-head span { color: #74d8b0; font-size: 11px; font-weight: 700; }
+      .workflow-steps {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr) 18px minmax(0, 1fr) 18px minmax(0, 1fr);
+        align-items: center;
+        gap: 6px;
+        padding: 28px 0;
+      }
+      .wf-stage {
+        min-width: 0;
+        padding: 16px 12px;
+        border: 1px solid #353c45;
+        border-radius: 13px;
+        background: #171b20;
+        text-align: center;
+      }
+      .wf-stage .wf-icon { display: grid; width: 34px; height: 34px; margin: 0 auto 10px; place-items: center; border-radius: 10px; background: #282d35; color: #dfe3e7; }
+      .wf-stage .wf-icon .lucide { width: 17px; height: 17px; }
+      .wf-stage strong, .wf-stage small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .wf-stage strong { font-size: 11px; }
+      .wf-stage small { margin-top: 5px; color: #89939f; font-size: 9px; }
+      .wf-stage.done { border-color: #32584d; }
+      .wf-stage.running {
+        border-color: transparent;
+        background:
+          linear-gradient(#171b20, #171b20) padding-box,
+          conic-gradient(from var(--angle), #5ee2aa, #b69adc, #4e708d, #5ee2aa) border-box;
+        animation: rotate-border 3s linear infinite;
+      }
+      .wf-arrow { color: #69737e; font-size: 14px; text-align: center; }
+      .wf-arrow .lucide { width: 14px; height: 14px; margin: 0 auto; }
+      @property --angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+      @keyframes rotate-border { to { --angle: 360deg; } }
+      .workflow-run-note { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding-top: 18px; border-top: 1px solid var(--line); color: #818a95; font-size: 11px; }
+      .workflow-run-note strong { color: #dce0e4; font-weight: 650; }
+
+      .workflow-catalog {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px 36px;
+        margin-top: 42px;
+        padding-top: 30px;
+        border-top: 1px solid var(--line);
+      }
+      .workflow-catalog strong { font-size: 13px; }
+      .workflow-catalog ul { margin: 14px 0 0; padding: 0; color: #808894; font-size: 13px; list-style: none; }
+      .workflow-catalog li { padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+
+      .files-copy .lead { margin: 28px 0 0; }
+      .files-copy .display { max-width: 540px; font-size: clamp(2.45rem, 3.8vw, 3.8rem); }
+      .files-copy .file-callout { margin: 28px 0 0; color: #eef0f2; font-size: 18px; font-weight: 700; line-height: 1.6; }
+      .folder-window {
+        overflow: hidden;
+        border: 1px solid var(--line-strong);
+        border-radius: 22px;
+        background: rgba(13, 16, 20, 0.9);
+        box-shadow: 0 30px 90px rgba(0, 0, 0, 0.34);
+      }
+      .folder-title { display: flex; height: 54px; align-items: center; gap: 10px; padding: 0 19px; border-bottom: 1px solid var(--line); color: #9aa2ac; font-size: 12px; }
+      .folder-title .lucide { width: 15px; height: 15px; }
+      .folder-tree { padding: 22px 24px 26px; font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px; line-height: 2.12; }
+      .tree-row { display: flex; align-items: center; gap: 9px; min-width: 0; color: #9ca4ae; }
+      .tree-row strong { color: #e3e6e9; font-weight: 600; }
+      .tree-row.indent-1 { padding-left: 24px; }
+      .tree-row.indent-2 { padding-left: 48px; }
+      .tree-icon { width: 18px; color: #87909b; text-align: center; }
+      .tree-icon .lucide { width: 14px; height: 14px; margin: 0 auto; }
+      .tree-note { margin-left: auto; color: #89929d; font-family: "Inter Variable", sans-serif; font-size: 10px; }
+
+      .model-intro { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: 80px; align-items: end; }
+      .model-intro .lead { margin: 0; }
+      .model-table {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1px;
+        margin-top: 54px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--line);
+      }
+      .model-row {
+        display: flex;
+        min-width: 0;
+        min-height: 190px;
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 26px;
+        background: rgba(13, 16, 20, 0.92);
+      }
+      .model-row span:first-child { color: #828a95; font-size: 11px; font-weight: 760; letter-spacing: 0.11em; text-transform: uppercase; }
+      .model-row strong { margin-top: auto; font-family: "Manrope Variable", sans-serif; font-size: 18px; letter-spacing: -0.025em; }
+      .model-row strong sup { margin-left: 3px; color: var(--purple); font-size: 12px; vertical-align: super; }
+      .model-row small { margin-top: 9px; color: #7d8590; font-size: 12px; line-height: 1.5; }
+      .model-after { display: grid; grid-template-columns: 1fr 1fr; gap: 50px; margin-top: 38px; }
+      .model-after p { margin: 0; color: #9199a4; font-size: 14px; line-height: 1.72; }
+      .model-after strong { color: #e2e5e9; }
+      .model-footnote { margin: 35px 0 0; padding: 17px 19px; border-left: 2px solid #76638d; background: rgba(103, 82, 128, 0.1); color: #858d98; font-size: 12px; line-height: 1.65; }
+      .model-footnote strong { color: #c5b8d4; font-weight: 700; }
+
+      .deploy-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin-top: 55px; overflow: hidden; border: 1px solid var(--line); border-radius: 22px; background: var(--line); }
+      .deploy-card { display: flex; min-height: 270px; flex-direction: column; justify-content: center; padding: 31px; background: rgba(13, 16, 20, 0.92); }
+      .deploy-card h3 { margin: 0 0 13px; font-family: "Manrope Variable", sans-serif; font-size: 24px; letter-spacing: -0.04em; }
+      .deploy-card p { margin: 0; color: #9199a4; font-size: 14px; line-height: 1.68; }
+
+      .ops-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
+      .ops-card {
+        min-width: 0;
+        padding: 31px;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: rgba(13, 16, 20, 0.84);
+      }
+      .ops-card h3 { margin: 0; font-family: "Manrope Variable", sans-serif; font-size: 27px; letter-spacing: -0.045em; }
+      .ops-card > p { margin: 17px 0 0; color: #929aa5; font-size: 14px; line-height: 1.68; }
+      .onboarding-tabs { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 27px; padding: 5px; border: 1px solid var(--line); border-radius: 12px; background: #0d1014; }
+      .onboarding-tabs span { padding: 9px 5px; border-radius: 8px; color: #747d88; font-size: 10px; font-weight: 700; text-align: center; }
+      .onboarding-tabs span:first-child { background: #292e35; color: #eef0f2; }
+      .service-checks { margin-top: 18px; }
+      .service-check { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); color: #a3abb4; font-size: 12px; }
+      .service-check i { width: 7px; height: 7px; border-radius: 50%; background: #38d69b; box-shadow: 0 0 10px rgba(56, 214, 155, 0.42); }
+      .service-check small { margin-left: auto; color: #87919d; }
+      .monitor {
+        margin-top: 27px;
+        padding: 21px;
+        border: 1px solid #343b44;
+        border-radius: 16px;
+        background: #121519;
+      }
+      .monitor-head, .monitor-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+      .monitor-head strong { font-size: 15px; }
+      .monitor-live { display: inline-flex; align-items: center; gap: 7px; color: #9fa6af; font-size: 11px; }
+      .monitor-live i { width: 7px; height: 7px; border-radius: 50%; background: #57dea8; }
+      .monitor-row { margin-top: 19px; color: #8f97a2; font-size: 12px; }
+      .monitor-row strong { color: #e5e7ea; font-family: "SFMono-Regular", monospace; font-size: 12px; }
+      .vram-track { height: 7px; margin-top: 11px; overflow: hidden; border-radius: 99px; background: #292e35; }
+      .vram-track i { display: block; width: 83%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #9da5af, #d9dde2); }
+      .update-note { margin-top: 52px; padding-top: 30px; border-top: 1px solid var(--line); color: #9aa2ac; font-size: 15px; line-height: 1.7; text-align: center; }
+      .update-note strong { color: #eef0f2; }
+
+      .privacy-layout { grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); gap: clamp(54px, 6vw, 80px); align-items: start; }
+      .privacy-copy .lead { margin: 28px 0 0; }
+      .privacy-points { border-top: 1px solid var(--line-strong); }
+      .privacy-point { display: grid; grid-template-columns: 34px 1fr; gap: 14px; padding: 22px 0; border-bottom: 1px solid var(--line); }
+      .privacy-point .privacy-check { display: grid; width: 28px; height: 28px; margin-top: 0; place-items: center; border-radius: 50%; background: #183128; color: #6fdbad; }
+      .privacy-check .lucide { width: 14px; height: 14px; stroke-width: 2.4; }
+      .privacy-point strong { display: block; font-size: 14px; }
+      .privacy-point span { display: block; margin-top: 5px; color: #818a95; font-size: 12px; line-height: 1.55; }
+      .privacy-note { margin: 35px 0 0; padding: 17px 19px; border: 1px solid var(--line); border-radius: 13px; color: #7e8792; font-size: 12px; line-height: 1.6; }
+
+      .faq-list { max-width: 900px; margin: 55px auto 0; border-top: 1px solid var(--line-strong); }
+      .faq-list details { border-bottom: 1px solid var(--line); }
+      .faq-list summary {
+        display: flex;
+        min-height: 76px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        cursor: pointer;
+        font-family: "Manrope Variable", sans-serif;
+        font-size: 18px;
+        font-weight: 680;
+        letter-spacing: -0.025em;
+        list-style: none;
+      }
+      .faq-list summary::-webkit-details-marker { display: none; }
+      .faq-list summary::after { content: "+"; color: #78818c; font-family: "Inter Variable", sans-serif; font-size: 23px; font-weight: 400; }
+      .faq-list details[open] summary::after { content: "−"; }
+      .faq-list details p { max-width: 800px; margin: -5px 0 27px; color: #9098a3; font-size: 14px; line-height: 1.72; }
+
+      .final-cta { padding: clamp(110px, 15vw, 190px) 0; text-align: center; }
+      .final-cta .display { max-width: 900px; margin: 0 auto; }
+      .final-cta .install-window { margin-top: 52px; text-align: left; }
+      .final-actions { justify-content: center; margin-top: 22px; }
+      .final-meta { margin: 25px 0 0; color: #737b86; font-size: 12px; }
+      footer { border-top: 1px solid var(--line); background: rgba(5, 6, 8, 0.5); }
+      .footer-inner { display: flex; min-height: 100px; align-items: center; justify-content: space-between; gap: 24px; color: #717985; font-size: 12px; }
+      .footer-links { display: flex; gap: 22px; }
+      .footer-links a:hover { color: #dfe2e6; }
+
+      @media (max-width: 1040px) {
+        .nav a:not(.header-github) { display: none; }
+        .tool-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .tool-card.chat { grid-column: 1 / -1; }
+        .continue-layout, .workflow-layout, .files-layout, .privacy-layout { grid-template-columns: 1fr; }
+        .continue-demo, .workflow-canvas, .folder-window { width: min(100%, 720px); margin: 0 auto; }
+        .model-intro { grid-template-columns: 1fr; gap: 28px; }
+        .model-table { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+
+      @media (max-width: 760px) {
+        .shell { width: min(var(--max), calc(100% - 32px)); }
+        .section { padding: 82px 0; }
+        .header-inner { min-height: 68px; }
+        .header-github { min-height: 38px; padding: 0 12px; font-size: 12px; }
+        .hero { min-height: 0; padding: 110px 0 56px; }
+        .hero-copy h1 { font-size: clamp(3rem, 11vw, 3.75rem); }
+        .hero-description { font-size: 16px; }
+        .hero-actions a { flex: 1; }
+        .gallery-section { padding-top: 18px; }
+        .gallery-grid { grid-template-columns: 1fr; grid-template-rows: none; gap: 10px; }
+        .gallery-item { aspect-ratio: 1.45; border-radius: 14px; }
+        .gallery-zoom { right: 10px; bottom: 10px; }
+        .install-window { margin-top: 42px; }
+        .install-head { padding: 0 18px; }
+        .install-code { padding: 22px 72px 22px 18px; font-size: 10px; }
+        .install-copy { right: 17px; }
+        .install-followup { align-items: flex-start; flex-direction: column; gap: 18px; padding: 19px 18px; }
+        .install-open { padding-left: 31px; text-align: left; }
+        .tool-grid { grid-template-columns: 1fr; }
+        .tool-card { min-height: 0; }
+        .tool-card.chat { display: flex; }
+        .chat-intro { align-items: flex-start; }
+        .chat ul { grid-template-columns: 1fr; margin-top: 20px; }
+        .continue-demo { --action-gap: 6px; --branch-extra: 4px; padding-right: 4%; padding-left: 4%; }
+        .continue-action { padding: 14px 4px; }
+        .workflow-canvas { width: 100%; max-width: 100%; min-width: 0; padding: 20px; }
+        .workflow-steps { grid-template-columns: 1fr; gap: 8px; }
+        .wf-arrow { transform: rotate(90deg); }
+        .workflow-run-note { align-items: flex-start; flex-direction: column; gap: 7px; }
+        .workflow-catalog { grid-template-columns: 1fr; }
+        .folder-tree { overflow-x: auto; padding: 19px; }
+        .folder-tree > div { min-width: 480px; }
+        .model-table { grid-template-columns: 1fr; }
+        .model-row { min-height: 164px; padding: 23px; }
+        .model-after { grid-template-columns: 1fr; gap: 20px; }
+        .deploy-grid { grid-template-columns: 1fr; }
+        .deploy-card { min-height: 0; }
+        .ops-layout { grid-template-columns: 1fr; }
+        .onboarding-tabs { grid-template-columns: 1fr; }
+        .final-actions a { width: 100%; }
+        .footer-inner { align-items: flex-start; flex-direction: column; padding: 30px 0; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+        body::before, .continue-action, .wf-stage.running { animation: none; }
+      }
     </style>
   </head>
   <body>
-    <main>
-      <h1>SparklingKit</h1>
-      <p>Install the local-first AI workspace with Docker Compose. Download and inspect the installer before running it.</p>
-      <pre><code>curl -fsSLO https://run.sparklingkit.com/stable/install.sh
+    <div class="page-layer">
+      <header class="site-header">
+        <div class="shell header-inner">
+          <a class="wordmark" href="#top" aria-label="SparklingKit home">SparklingKit</a>
+          <nav class="nav" aria-label="Main navigation">
+            <a href="#tools">Tools</a>
+            <a href="#workflows">Workflows</a>
+            <a href="#models">Models</a>
+            <a href="#faq">FAQ</a>
+            <a class="header-github" href="https://github.com/stevibe/SparklingKit">GitHub <i class="inline-icon" data-lucide="external-link" aria-hidden="true"></i></a>
+          </nav>
+        </div>
+      </header>
+
+      <main>
+        <section class="hero" id="top">
+          <div class="shell hero-grid">
+            <div class="hero-copy">
+              <h1 class="gradient-text">Private AI workbench for your DGX Spark</h1>
+              <h2>One box. Six models. Zero cloud required.</h2>
+              <p class="hero-description">Transcribe meetings. OCR documents. Translate, chat, generate images, and build mind maps. Then pass any result straight into the next tool, or chain them into visual workflows. Everything stays on your machine, in one folder you can simply copy to back up.</p>
+            </div>
+
+            <div class="install-window" aria-label="SparklingKit installation instructions">
+              <div class="install-head">
+                <div class="install-title"><span class="install-title-icon" aria-hidden="true"><i data-lucide="terminal"></i></span><strong>Install SparklingKit</strong></div>
+                <span>Docker required</span>
+              </div>
+              <div class="install-body">
+                <div class="install-command">
+                  <pre class="install-code" id="hero-command">curl -fsSLO https://run.sparklingkit.com/stable/install.sh
 less install.sh
-bash install.sh</code></pre>
-      <p><a href="https://github.com/stevibe/SparklingKit">Source and documentation on GitHub</a></p>
-    </main>
+bash install.sh</pre>
+                  <button class="copy-button icon-only install-copy" type="button" data-copy="hero-command" aria-label="Copy installation commands" title="Copy installation commands"><i data-lucide="copy" aria-hidden="true"></i></button>
+                </div>
+                <div class="install-followup">
+                  <div class="onboarding-note"><i data-lucide="sparkles" aria-hidden="true"></i><div><strong>Install the workbench wherever you want it</strong><span>Run this on your DGX Spark or another machine; guided model setup comes next.</span></div></div>
+                  <div class="install-open"><span>Then open</span><code>http://localhost:54321</code></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="hero-after-install">
+              <div class="hero-actions">
+                <a class="button-secondary" href="https://github.com/stevibe/SparklingKit">View on GitHub <i class="inline-icon" data-lucide="external-link" aria-hidden="true"></i></a>
+              </div>
+              <p class="hero-meta">Open source · Apache 2.0 · linux/amd64 + arm64 · Built for unified-memory machines like NVIDIA DGX Spark</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="gallery-section" aria-label="SparklingKit product gallery">
+          <div class="shell gallery-grid">
+            <button class="gallery-item" type="button" aria-label="Open Workbench overview screenshot" aria-haspopup="dialog" data-gallery-image="images/workbench-overview.png" data-gallery-alt="SparklingKit Workbench with file tools, translation, workflows, image generation, chat, recent jobs, and live model health">
+              <img src="images/workbench-overview.png" alt="SparklingKit Workbench overview" width="3790" height="2610" decoding="async" />
+              <span class="gallery-zoom" aria-hidden="true"><i data-lucide="expand"></i></span>
+            </button>
+            <button class="gallery-item" type="button" aria-label="Open interactive mind map screenshot" aria-haspopup="dialog" data-gallery-image="images/document-mind-map.png" data-gallery-alt="A SparklingKit PDF job showing its source file, OCR document, interactive mind map, and Markdown outline">
+              <img src="images/document-mind-map.png" alt="A document converted into an interactive mind map" width="3790" height="2622" loading="lazy" decoding="async" />
+              <span class="gallery-zoom" aria-hidden="true"><i data-lucide="expand"></i></span>
+            </button>
+            <button class="gallery-item" type="button" aria-label="Open workflow editor screenshot" aria-haspopup="dialog" data-gallery-image="images/workflow-editor.png" data-gallery-alt="SparklingKit workflow editor connecting an input through OCR and an LLM prompt to an end node">
+              <img src="images/workflow-editor.png" alt="SparklingKit visual workflow editor" width="3790" height="2610" loading="lazy" decoding="async" />
+              <span class="gallery-zoom" aria-hidden="true"><i data-lucide="expand"></i></span>
+            </button>
+          </div>
+        </section>
+
+        <section class="section section-deep thesis">
+          <div class="shell">
+            <p class="eyebrow">The thesis</p>
+            <h2 class="display">A gaming GPU forces you to pick one model. <span class="gradient-text">128 GB doesn't.</span></h2>
+            <p class="lead">Unified-memory machines changed the rules of local AI. With 128 GB, you don't choose between a chat model <em>or</em> a transcription model <em>or</em> an image model. You keep a whole team of specialists loaded at once, each one excellent at its job.</p>
+            <p class="lead">SparklingKit is the workbench that puts that team to work: one interface, one folder, one small box on your desk that quietly does what used to take five cloud subscriptions.</p>
+          </div>
+        </section>
+
+        <section class="section section-soft" id="tools">
+          <div class="shell">
+            <div class="section-heading">
+              <p class="eyebrow">Six tools, one panel</p>
+              <h2 class="display">Everything you'd reach for, already there.</h2>
+            </div>
+            <div class="tool-grid">
+              <article class="tool-card">
+                <span class="tool-icon" aria-hidden="true"><i data-lucide="audio-lines"></i></span>
+                <h3>Transcription</h3>
+                <p>Meetings and lectures become timestamped text.</p>
+                <ul><li>Handles hours-long recordings with smart chunking</li><li>Markdown, JSON, SRT and VTT export</li><li>Live progress, stoppable anytime</li></ul>
+              </article>
+              <article class="tool-card">
+                <span class="tool-icon" aria-hidden="true"><i data-lucide="scan-text"></i></span>
+                <h3>OCR</h3>
+                <p>Scans and PDFs become clean Markdown.</p>
+                <ul><li>Batch multiple files</li><li>Structured page data</li><li>Originals preserved beside every result</li></ul>
+              </article>
+              <article class="tool-card">
+                <span class="tool-icon" aria-hidden="true"><i data-lucide="languages"></i></span>
+                <h3>Translation</h3>
+                <p>A dual-pane translator, powered by a dedicated model.</p>
+                <ul><li>Live translation as you type</li><li>Automatic language detection</li><li>Works with pasted text or processed documents</li></ul>
+              </article>
+              <article class="tool-card">
+                <span class="tool-icon" aria-hidden="true"><i data-lucide="scan-search"></i></span>
+                <h3>Visual Grounding</h3>
+                <p>Ask an image where things are.</p>
+                <ul><li>Up to 12 natural-language queries per job</li><li>Boxes drawn directly on the image</li><li>Coordinates available downstream</li></ul>
+              </article>
+              <article class="tool-card">
+                <span class="tool-icon" aria-hidden="true"><i data-lucide="image"></i></span>
+                <h3>Text to Image</h3>
+                <p>Generate images locally. No credits, no queue.</p>
+                <ul><li>Square, landscape and portrait presets</li><li>Prompt saved with every image</li><li>Full thumbnail history</li></ul>
+              </article>
+              <article class="tool-card">
+                <span class="tool-icon" aria-hidden="true"><i data-lucide="network"></i></span>
+                <h3>Mind Maps</h3>
+                <p>Any topic, note, or document becomes an interactive map.</p>
+                <ul><li>Pan, zoom, expand and collapse</li><li>Configurable depth and breadth</li><li>Portable JSON plus a Markdown outline</li></ul>
+              </article>
+              <article class="tool-card chat">
+                <div class="chat-intro">
+                  <span class="tool-icon" aria-hidden="true"><i data-lucide="message-circle"></i></span>
+                  <div class="chat-copy"><h3>Chat</h3><p>Talk to your LLM or to any result above.</p></div>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="section section-deep" id="continue">
+          <div class="shell continue-layout">
+            <div class="signature-copy">
+              <p class="eyebrow">The Continue with system</p>
+              <h2 class="display">Your work doesn't end. <span class="gradient-text">It continues.</span></h2>
+              <p class="lead">In most AI tools, a result is a dead end. You copy, paste, and start over somewhere else. In SparklingKit, every result is a typed artifact that knows where it can go next.</p>
+              <p class="lead">Finish a transcription and the next steps are already waiting: <strong>Translate it. Map it. Chat with it.</strong> OCR a contract, then question it. Generate an image, then ground objects inside it. Each tool declares what it accepts and produces, and SparklingKit routes the possibilities automatically, including into any workflow you've enabled.</p>
+              <p class="closing">One upload, an entire chain of work, all without leaving the panel.</p>
+            </div>
+            <div class="continue-demo" aria-label="Continue with action routing demonstration">
+              <div class="artifact">
+                <div class="artifact-head"><span class="artifact-icon" aria-hidden="true"><i data-lucide="file-text"></i></span><div><strong>meeting-transcript.md</strong><small>Transcription · completed just now</small></div></div>
+                <div class="artifact-lines"><i></i><i></i><i></i></div>
+              </div>
+              <span class="route-stem"></span><span class="route-line"></span>
+              <div class="continue-actions">
+                <div class="continue-action"><span aria-hidden="true"><i data-lucide="languages"></i></span><strong>Translate</strong><small>Accepts transcript</small></div>
+                <div class="continue-action"><span aria-hidden="true"><i data-lucide="network"></i></span><strong>Mind map</strong><small>Accepts document</small></div>
+                <div class="continue-action"><span aria-hidden="true"><i data-lucide="message-circle"></i></span><strong>Chat</strong><small>Attach as reference</small></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section section-soft" id="workflows">
+          <div class="shell workflow-layout">
+            <div class="workflow-copy">
+              <p class="eyebrow">Visual workflows</p>
+              <h2 class="display">Chain it once. Run it forever.</h2>
+              <p class="lead">The same tools you use by hand snap together in a node-based workflow editor. Drag in OCR, Translation, an LLM prompt, a Mind Map. Connect them. Incompatible connections are simply refused, so broken graphs can't happen. Add conditions, branches, and merges when tasks get smarter.</p>
+              <p class="lead">Then watch it run. The live graph shows every node working, finishing, or being skipped, and every past run keeps its full diagram: which branches fired, how long each step took, and the complete lineage from input to output.</p>
+              <ul class="feature-list">
+                <li><i data-lucide="check" aria-hidden="true"></i>Workflows are saved as readable JSON files.</li>
+                <li><i data-lucide="check" aria-hidden="true"></i>Enabled workflows appear on the Workbench and in Continue-with menus.</li>
+                <li><i data-lucide="check" aria-hidden="true"></i>No arbitrary code execution. Workflows are data, not scripts.</li>
+              </ul>
+            </div>
+            <div>
+              <div class="workflow-canvas" aria-label="Workflow run diagram">
+                <div class="workflow-run-head"><strong>Lecture to study kit</strong><span>Running</span></div>
+                <div class="workflow-steps">
+                  <div class="wf-stage done"><span class="wf-icon" aria-hidden="true"><i data-lucide="upload"></i></span><strong>Input</strong><small>lecture.pdf</small></div>
+                  <span class="wf-arrow" aria-hidden="true"><i data-lucide="arrow-right"></i></span>
+                  <div class="wf-stage done"><span class="wf-icon" aria-hidden="true"><i data-lucide="scan-text"></i></span><strong>OCR</strong><small>8 pages</small></div>
+                  <span class="wf-arrow" aria-hidden="true"><i data-lucide="arrow-right"></i></span>
+                  <div class="wf-stage running"><span class="wf-icon" aria-hidden="true"><i data-lucide="languages"></i></span><strong>Translate</strong><small>Processing</small></div>
+                  <span class="wf-arrow" aria-hidden="true"><i data-lucide="arrow-right"></i></span>
+                  <div class="wf-stage"><span class="wf-icon" aria-hidden="true"><i data-lucide="network"></i></span><strong>Mind map</strong><small>Waiting</small></div>
+                </div>
+                <div class="workflow-run-note"><span>Revision 4 · JSON workflow</span><strong>Every node keeps its status and lineage</strong></div>
+              </div>
+              <div class="workflow-catalog">
+                <div>
+                  <strong>Service nodes</strong>
+                  <ul><li>OCR</li><li>Transcription</li><li>Translation</li><li>Grounding</li><li>Text to Image</li><li>Mind Map</li><li>LLM Prompt</li><li>Create Chat</li></ul>
+                </div>
+                <div>
+                  <strong>Logic nodes</strong>
+                  <ul><li>Input</li><li>Select</li><li>If</li><li>Switch</li><li>Merge</li><li>Save to File</li><li>End</li><li>Fail</li></ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section section-deep" id="files">
+          <div class="shell files-layout">
+            <div class="files-copy">
+              <p class="eyebrow">Everything is a file</p>
+              <h2 class="display">Your workspace is a folder. That's the whole story.</h2>
+              <p class="lead">Every job, transcript, image, mind map, chat, workflow, and setting lives as an ordinary file inside one directory. No database server. No proprietary formats. No export button because there's nothing to export from.</p>
+              <p class="file-callout">Back up by copying the folder. Migrate by moving it. Search it with your own tools. Point Obsidian at it.</p>
+              <p class="lead">Preview, rename, download, or delete anything from the panel, or just open the folder. It's your data, in the most literal sense possible.</p>
+            </div>
+            <div class="folder-window" aria-label="SparklingKit data folder">
+              <div class="folder-title"><i data-lucide="folder"></i><span>sparklingkit/data</span></div>
+              <div class="folder-tree">
+                <div>
+                  <div class="tree-row"><span class="tree-icon"><i data-lucide="chevron-down"></i></span><strong>config/</strong><span class="tree-note">settings and workflows</span></div>
+                  <div class="tree-row indent-1"><span class="tree-icon"><i data-lucide="settings"></i></span>settings.json</div>
+                  <div class="tree-row indent-1"><span class="tree-icon"><i data-lucide="chevron-down"></i></span><strong>workflows/</strong></div>
+                  <div class="tree-row indent-2"><span class="tree-icon"><i data-lucide="file-json"></i></span>lecture-to-study-kit.json</div>
+                  <div class="tree-row"><span class="tree-icon"><i data-lucide="chevron-down"></i></span><strong>jobs/</strong><span class="tree-note">sources and outputs</span></div>
+                  <div class="tree-row indent-1"><span class="tree-icon"><i data-lucide="chevron-down"></i></span><strong>meeting-transcription/</strong></div>
+                  <div class="tree-row indent-2"><span class="tree-icon"><i data-lucide="audio-lines"></i></span>meeting.m4a</div>
+                  <div class="tree-row indent-2"><span class="tree-icon"><i data-lucide="file-text"></i></span>transcript.md</div>
+                  <div class="tree-row indent-2"><span class="tree-icon"><i data-lucide="network"></i></span>mindmap.json</div>
+                  <div class="tree-row"><span class="tree-icon"><i data-lucide="chevron-down"></i></span><strong>chats/</strong><span class="tree-note">referenced conversations</span></div>
+                  <div class="tree-row indent-1"><span class="tree-icon"><i data-lucide="message-circle"></i></span>project-review/chat.json</div>
+                  <div class="tree-row"><span class="tree-icon"><i data-lucide="chevron-right"></i></span><strong>logs/</strong></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section section-soft" id="models">
+          <div class="shell">
+            <div class="model-intro">
+              <div><p class="eyebrow">The hand-picked stack</p><h2 class="display">Six models, chosen to share one machine.</h2></div>
+              <p class="lead">We didn't grab the biggest model of each kind. We picked specialists that are excellent at their jobs <em>and</em> fit together in 128 GB with room to breathe. That's the unified-memory advantage, used deliberately.</p>
+            </div>
+            <div class="model-table" aria-label="Reference model stack">
+              <div class="model-row"><span>Multimodal LLM</span><strong>Qwen3.6-35B-A3B (NVFP4)</strong><small>Chat, reasoning, vision and workflow prompts</small></div>
+              <div class="model-row"><span>OCR</span><strong>Unlimited-OCR</strong><small>Page and image text extraction</small></div>
+              <div class="model-row"><span>Speech recognition</span><strong>Qwen3-ASR-1.7B</strong><small>Audio and video transcription</small></div>
+              <div class="model-row"><span>Translation</span><strong>Hy-MT2-1.8B (FP8)</strong><small>Dedicated multilingual translation</small></div>
+              <div class="model-row"><span>Visual grounding</span><strong>LocateAnything-3B<sup aria-label="See license note">*</sup></strong><small>Query-driven image region location</small></div>
+              <div class="model-row"><span>Image generation</span><strong>Z-Image-Turbo</strong><small>Fast local text-to-image generation</small></div>
+            </div>
+            <div class="model-after">
+              <p>The starter tooling handles everything between bare machine and working stack: architecture checks, model downloads with pinned revisions, container builds, memory-conscious startup order, and per-service readiness checks.</p>
+              <p><strong>And none of it is hard-coded.</strong> Every model is independently replaceable. SparklingKit is the workbench and orchestration layer, not a locked bundle. Swap any endpoint for your own favorite.</p>
+            </div>
+            <p class="model-footnote">Model weights are downloaded from their original publishers and each retains its own license. <strong>* LocateAnything-3B is currently published under research/non-commercial terms.</strong> Swap the grounding endpoint if your use is commercial.</p>
+          </div>
+        </section>
+
+        <section class="section section-deep" id="deployment">
+          <div class="shell">
+            <div class="section-heading center"><p class="eyebrow">Run it your way</p><h2 class="display">From one box to any topology.</h2></div>
+            <div class="deploy-grid">
+              <article class="deploy-card"><h3>All-in-one</h3><p>SparklingKit and all six models on a single DGX Spark. The full workbench in one small machine on your desk.</p></article>
+              <article class="deploy-card"><h3>Split</h3><p>Models on the Spark, SparklingKit on the server that owns your data. Your workspace lives where you want it.</p></article>
+              <article class="deploy-card"><h3>Bring your own</h3><p>Just the panel, pointed at compatible local servers, remote machines, cloud APIs, or a deliberate mix. Local-first, your call always.</p></article>
+            </div>
+          </div>
+        </section>
+
+        <section class="section section-soft">
+          <div class="shell">
+            <div class="ops-layout">
+              <article class="ops-card">
+                <p class="eyebrow">First launch</p>
+                <h3>Onboarding that respects your time.</h3>
+                <p>Choose models on this machine, connect to a remote machine, or configure endpoints by hand. Each path includes copyable commands, a verification check for every service, and a staged review before anything is applied.</p>
+                <div class="onboarding-tabs"><span>Run locally</span><span>Run remotely</span><span>Configure manually</span></div>
+                <div class="service-checks">
+                  <div class="service-check"><i></i>Multimodal LLM <small>Verified</small></div>
+                  <div class="service-check"><i></i>OCR and transcription <small>Verified</small></div>
+                  <div class="service-check"><i></i>Translation and grounding <small>Verified</small></div>
+                  <div class="service-check"><i></i>Image generation <small>Verified</small></div>
+                </div>
+              </article>
+              <article class="ops-card">
+                <p class="eyebrow">Live monitoring</p>
+                <h3>A machine you can see.</h3>
+                <p>Every service shows live health in the sidebar. Add the optional DGX Spark monitor for unified-memory use, CUDA allocations, GPU utilization and temperature at a glance.</p>
+                <div class="monitor">
+                  <div class="monitor-head"><strong>DGX Spark</strong><span class="monitor-live"><i></i>Live</span></div>
+                  <div class="monitor-row"><span>VRAM</span><strong>101.7 GiB / 121.7 GiB</strong></div>
+                  <div class="vram-track"><i></i></div>
+                  <div class="monitor-row"><span>CUDA allocations</span><strong>82.6 GiB</strong></div>
+                  <div class="monitor-row"><span>GPU 18% · 48°C</span><span>6/6 models</span></div>
+                </div>
+              </article>
+            </div>
+            <p class="update-note"><strong>Updates without fear:</strong> the built-in updater verifies checksums, keeps your data folder untouched, waits for health checks, and can roll back to the previous version with one command.</p>
+          </div>
+        </section>
+
+        <section class="section section-deep">
+          <div class="shell privacy-layout">
+            <div class="privacy-copy">
+              <p class="eyebrow">Private by architecture</p>
+              <h2 class="display">Nothing leaves unless you send it.</h2>
+              <p class="lead">SparklingKit runs on your hardware and stores everything in your folder. No accounts. No telemetry. No cloud dependency. Meetings, contracts, and recordings are processed on the machine under your desk and stay there.</p>
+              <p class="lead"><em>Local-first, not local-only: connecting a cloud API is always your explicit choice, never a default.</em></p>
+            </div>
+            <div>
+              <div class="privacy-points">
+                <div class="privacy-point"><span class="privacy-check" aria-hidden="true"><i data-lucide="check"></i></span><div><strong>Atomic writes</strong><span>Job records are protected from partial updates and corruption.</span></div></div>
+                <div class="privacy-point"><span class="privacy-check" aria-hidden="true"><i data-lucide="check"></i></span><div><strong>Separated secrets</strong><span>API keys live apart from job data with restrictive permissions.</span></div></div>
+                <div class="privacy-point"><span class="privacy-check" aria-hidden="true"><i data-lucide="check"></i></span><div><strong>Durable recovery</strong><span>Interrupted work reconciles from durable files, not fragile queues.</span></div></div>
+                <div class="privacy-point"><span class="privacy-check" aria-hidden="true"><i data-lucide="check"></i></span><div><strong>Readable forever</strong><span>Every record remains an ordinary file in formats you already know.</span></div></div>
+              </div>
+              <p class="privacy-note">SparklingKit doesn't include multi-user authentication yet. For access beyond your own network, place it behind a VPN or authenticated reverse proxy.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="section section-soft" id="faq">
+          <div class="shell">
+            <div class="section-heading center"><p class="eyebrow">FAQ</p><h2 class="display">The practical questions.</h2></div>
+            <div class="faq-list">
+              <details><summary>Do I need a DGX Spark?</summary><p>For the complete out-of-the-box model stack, currently yes. SparklingKit is tested and supported on NVIDIA DGX Spark with the GB10 Grace Blackwell Superchip. We are adding support for other unified-memory machines. You can already run the SparklingKit panel separately and connect it to compatible local, remote, or cloud endpoints.</p></details>
+              <details><summary>Are the models included in the app?</summary><p>No. The app image stays small. The starter tooling downloads pinned model revisions from their original publishers on first setup, and reuses downloads and caches afterward.</p></details>
+              <details><summary>Is it really free?</summary><p>SparklingKit is Apache 2.0. Each model keeps its own license. Most are permissive; check the model-stack footnote for the current exception.</p></details>
+              <details><summary>What happens to my data if I stop using SparklingKit?</summary><p>Nothing. It is already yours, as Markdown, JSON, images, and media files in one folder. There is no lock-in to escape from.</p></details>
+              <details><summary>Can I use it on my phone?</summary><p>The panel is fully responsive. Start a transcription from your phone on the LAN and check progress from anywhere in the house.</p></details>
+              <details><summary>Can workflows run untrusted code?</summary><p>No. Workflow definitions are pure data and cannot execute JavaScript or shell commands.</p></details>
+            </div>
+          </div>
+        </section>
+
+        <section class="final-cta section-deep">
+          <div class="shell">
+            <p class="eyebrow">Make the hardware yours</p>
+            <h2 class="display">One small box. A complete AI workbench. <span class="gradient-text">Yours.</span></h2>
+            <div class="install-window" aria-label="SparklingKit installation instructions">
+              <div class="install-head">
+                <div class="install-title"><span class="install-title-icon" aria-hidden="true"><i data-lucide="terminal"></i></span><strong>Install SparklingKit</strong></div>
+                <span>Docker required</span>
+              </div>
+              <div class="install-body">
+                <div class="install-command">
+                  <pre class="install-code" id="final-command">curl -fsSLO https://run.sparklingkit.com/stable/install.sh
+less install.sh
+bash install.sh</pre>
+                  <button class="copy-button icon-only install-copy" type="button" data-copy="final-command" aria-label="Copy installation commands" title="Copy installation commands"><i data-lucide="copy" aria-hidden="true"></i></button>
+                </div>
+                <div class="install-followup">
+                  <div class="onboarding-note"><i data-lucide="sparkles" aria-hidden="true"></i><div><strong>Install the workbench wherever you want it</strong><span>Run this on your DGX Spark or another machine; guided model setup comes next.</span></div></div>
+                  <div class="install-open"><span>Then open</span><code>http://localhost:54321</code></div>
+                </div>
+              </div>
+            </div>
+            <div class="hero-actions final-actions">
+              <a class="button-secondary" href="https://github.com/stevibe/SparklingKit">Star on GitHub <i class="inline-icon" data-lucide="external-link" aria-hidden="true"></i></a>
+            </div>
+            <p class="final-meta">Apache 2.0 · Built in the open · Bring your own models, or use ours</p>
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <div class="shell footer-inner">
+          <span class="wordmark">SparklingKit</span>
+          <span>Private AI work, stored as files.</span>
+          <nav class="footer-links" aria-label="Footer links"><a href="https://github.com/stevibe/SparklingKit">GitHub</a><a href="https://github.com/stevibe/SparklingKit/blob/main/docs/deployment.md">Deployment</a><a href="https://github.com/stevibe/SparklingKit/blob/main/LICENSE">Apache 2.0</a></nav>
+        </div>
+      </footer>
+    </div>
+
+    <dialog class="gallery-lightbox" id="gallery-lightbox" aria-label="Expanded product screenshot">
+      <div class="lightbox-frame">
+        <button class="lightbox-close" type="button" aria-label="Close screenshot"><i data-lucide="x" aria-hidden="true"></i></button>
+        <img class="lightbox-image" src="" alt="" />
+      </div>
+    </dialog>
+
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.542.0/dist/umd/lucide.min.js"></script>
+    <script>
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
+      document.querySelectorAll("[data-copy]").forEach(function (button) {
+        button.addEventListener("click", async function () {
+          var source = document.getElementById(button.getAttribute("data-copy"));
+          if (!source) return;
+          try {
+            await navigator.clipboard.writeText(source.textContent.trim());
+            if (button.classList.contains("icon-only")) {
+              button.innerHTML = '<i data-lucide="check" aria-hidden="true"></i>';
+              button.classList.add("is-copied");
+              button.setAttribute("aria-label", "Installation commands copied");
+              button.setAttribute("title", "Copied");
+              window.lucide && window.lucide.createIcons();
+              window.setTimeout(function () {
+                button.innerHTML = '<i data-lucide="copy" aria-hidden="true"></i>';
+                button.classList.remove("is-copied");
+                button.setAttribute("aria-label", "Copy installation commands");
+                button.setAttribute("title", "Copy installation commands");
+                window.lucide && window.lucide.createIcons();
+              }, 2000);
+            } else {
+              button.textContent = "Copied";
+              window.setTimeout(function () { button.textContent = "Copy"; }, 2000);
+            }
+          } catch {
+            if (button.classList.contains("icon-only")) {
+              button.setAttribute("aria-label", "Copy failed; select the commands manually");
+              button.setAttribute("title", "Select the commands manually");
+            } else {
+              button.textContent = "Select";
+            }
+          }
+        });
+      });
+
+      var galleryLightbox = document.getElementById("gallery-lightbox");
+      var galleryLightboxImage = galleryLightbox && galleryLightbox.querySelector(".lightbox-image");
+      var galleryLightboxClose = galleryLightbox && galleryLightbox.querySelector(".lightbox-close");
+
+      document.querySelectorAll("[data-gallery-image]").forEach(function (button) {
+        button.addEventListener("click", function () {
+          if (!galleryLightbox || !galleryLightboxImage) return;
+          galleryLightboxImage.src = button.getAttribute("data-gallery-image");
+          galleryLightboxImage.alt = button.getAttribute("data-gallery-alt") || "SparklingKit product screenshot";
+          galleryLightbox.showModal();
+        });
+      });
+
+      if (galleryLightboxClose) {
+        galleryLightboxClose.addEventListener("click", function () { galleryLightbox.close(); });
+      }
+      if (galleryLightbox) {
+        galleryLightbox.addEventListener("click", function (event) {
+          if (event.target === galleryLightbox) galleryLightbox.close();
+        });
+        galleryLightbox.addEventListener("close", function () {
+          if (galleryLightboxImage) galleryLightboxImage.src = "";
+        });
+      }
+    </script>
   </body>
 </html>
