@@ -1,18 +1,23 @@
 name: Publish run.sparklingkit.com
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - distribution/run-site/**
+      - .github/workflows/publish-run-site.yml
   workflow_dispatch:
     inputs:
       release_tag:
         description: Immutable GitHub release tag to publish as stable
         required: true
         type: string
-  workflow_call:
-    inputs:
-      release_tag:
-        description: Immutable GitHub release tag to publish as stable
-        required: true
-        type: string
+  workflow_run:
+    workflows:
+      - Release
+    types:
+      - completed
 
 permissions:
   contents: read
@@ -25,14 +30,32 @@ concurrency:
 
 jobs:
   build:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
+      - name: Resolve release tag
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUESTED_TAG: ${{ inputs.release_tag || github.event.workflow_run.head_branch }}
+        run: |
+          set -euo pipefail
+          release_tag="$REQUESTED_TAG"
+          if [[ -z "$release_tag" ]]; then
+            release_tag="$(gh release view --json tagName --jq .tagName)"
+          fi
+          if [[ ! "$release_tag" =~ ^v[0-9] ]]; then
+            printf 'Invalid release tag: %s\n' "$release_tag" >&2
+            exit 1
+          fi
+          printf 'tag=%s\n' "$release_tag" >> "$GITHUB_OUTPUT"
+
       - name: Download attested release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -euo pipefail
           mkdir release-assets
@@ -42,7 +65,7 @@ jobs:
 
       - name: Assemble static distribution site
         env:
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -euo pipefail
           version="${RELEASE_TAG#v}"
