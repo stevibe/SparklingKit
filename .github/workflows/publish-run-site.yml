@@ -76,9 +76,11 @@ jobs:
           printf '{"version":"%s"}\n' "$version" > run-site/stable/version.json
           cp run-site/stable/version.json "run-site/v${version}/version.json"
           cp release-assets/dgx-install.sh run-site/dgx/stable/install.sh
-          cp release-assets/sparklingkit-dgx-stack.tar.gz release-assets/SHA256SUMS run-site/dgx/stable/
+          cp release-assets/sparklingkit-dgx release-assets/sparklingkit-dgx-stack.tar.gz release-assets/SHA256SUMS run-site/dgx/stable/
+          printf '{"version":"%s"}\n' "$version" > run-site/dgx/stable/version.json
           cp release-assets/dgx-install.sh "run-site/dgx/v${version}/install.sh"
-          cp release-assets/sparklingkit-dgx-stack.tar.gz release-assets/SHA256SUMS "run-site/dgx/v${version}/"
+          cp release-assets/sparklingkit-dgx release-assets/sparklingkit-dgx-stack.tar.gz release-assets/SHA256SUMS "run-site/dgx/v${version}/"
+          cp run-site/dgx/stable/version.json "run-site/dgx/v${version}/version.json"
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6

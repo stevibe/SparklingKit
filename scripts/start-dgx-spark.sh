@@ -8,7 +8,10 @@ ACTION="start"
 ACCEPT_MODEL_LICENSES=false
 SKIP_BUILD=false
 SKIP_DOWNLOAD=false
+SKIP_PULL=false
 DEPLOY_APP=true
+REFRESH_IMAGES=false
+FORCE_RECREATE=false
 
 usage() {
   cat <<'EOF'
@@ -20,6 +23,9 @@ Options:
   --accept-model-licenses  Confirm that you reviewed and accept each model's terms
   --skip-build             Reuse existing local container images
   --skip-download          Reuse model files already present under data/dgx-models
+  --skip-pull              Reuse existing pulled service images
+  --refresh-images         Refresh base images and recreate every service
+  --force-recreate         Recreate services after using the selected images
   --models-only            Run the six models and monitor without SparklingKit
   -h, --help               Show this help
 
@@ -44,6 +50,16 @@ while (($#)); do
       ;;
     --skip-download)
       SKIP_DOWNLOAD=true
+      ;;
+    --skip-pull)
+      SKIP_PULL=true
+      ;;
+    --refresh-images)
+      REFRESH_IMAGES=true
+      FORCE_RECREATE=true
+      ;;
+    --force-recreate)
+      FORCE_RECREATE=true
       ;;
     --models-only)
       DEPLOY_APP=false
@@ -180,10 +196,14 @@ if [[ "$SKIP_BUILD" != "true" ]]; then
   printf '\nBuilding SparklingKit and DGX service images...\n'
   build_targets=(model-downloader qwen3-asr hy-mt2 locateanything z-image dgx-status)
   if [[ "$DEPLOY_APP" == "true" ]]; then build_targets+=(app); fi
-  "${COMPOSE[@]}" --profile tools build "${build_targets[@]}"
+  if [[ "$REFRESH_IMAGES" == "true" ]]; then
+    "${COMPOSE[@]}" --profile tools build --pull "${build_targets[@]}"
+  else
+    "${COMPOSE[@]}" --profile tools build "${build_targets[@]}"
+  fi
   pull_targets=(qwen36 unlimited-ocr)
   if [[ "$DEPLOY_APP" == "true" ]]; then pull_targets+=(redis); fi
-  "${COMPOSE[@]}" pull "${pull_targets[@]}"
+  if [[ "$SKIP_PULL" != "true" ]]; then "${COMPOSE[@]}" pull "${pull_targets[@]}"; fi
 fi
 
 download_model() {
@@ -270,7 +290,11 @@ start_service() {
   local timeout_seconds="$4"
 
   printf '\nStarting %s...\n' "$label"
-  "${COMPOSE[@]}" up -d --no-deps "$service"
+  if [[ "$FORCE_RECREATE" == "true" ]]; then
+    "${COMPOSE[@]}" up -d --no-deps --force-recreate "$service"
+  else
+    "${COMPOSE[@]}" up -d --no-deps "$service"
+  fi
   wait_for_endpoint "$service" "$label" "$url" "$timeout_seconds"
 }
 
@@ -285,7 +309,11 @@ start_service dgx-status "System status" "http://127.0.0.1:8330/health" 120
 
 if [[ "$DEPLOY_APP" == "true" ]]; then
   printf '\nStarting Redis and SparklingKit...\n'
-  "${COMPOSE[@]}" up -d redis app
+  if [[ "$FORCE_RECREATE" == "true" ]]; then
+    "${COMPOSE[@]}" up -d --force-recreate redis app
+  else
+    "${COMPOSE[@]}" up -d redis app
+  fi
   wait_for_endpoint app "SparklingKit" "http://127.0.0.1:54321/api/health" 180
   printf '\nSparklingKit is ready at http://localhost:54321\n\n'
 else

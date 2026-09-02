@@ -1,0 +1,291 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$SCRIPT_DIR/compose.dgx.yaml" ]]; then
+  PROJECT_DIR="$SCRIPT_DIR"
+elif [[ -f "$SCRIPT_DIR/../../compose.dgx.yaml" ]]; then
+  PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+else
+  printf 'Could not locate the SparklingKit DGX stack beside %s.\n' "$SCRIPT_DIR" >&2
+  exit 1
+fi
+
+RELEASE_BASE_URL="${SPARKLINGKIT_DGX_RELEASE_URL:-https://run.sparklingkit.com/dgx/stable}"
+VERSION_FILE="$PROJECT_DIR/.sparklingkit-dgx-version"
+BACKUP_DIR="$PROJECT_DIR/.previous-dgx-stack"
+LOCK_DIR="$PROJECT_DIR/.sparklingkit-dgx-update.lock"
+ACTIVE_UPDATE_TEMP=""
+MANAGED_PATHS=(
+  compose.yaml
+  compose.spark.yaml
+  compose.dgx.yaml
+  LICENSE
+  sparklingkit-dgx
+  .sparklingkit-dgx-version
+  scripts
+  services
+)
+
+usage() {
+  cat <<'EOF'
+Usage: ./sparklingkit-dgx <command> [options]
+
+Commands:
+  start       Start the six model services and system monitor
+  update      Install the latest verified stack, rebuild, and health-check it
+  rollback    Restore and restart the stack release recorded before the update
+  status      Show containers, endpoints, and the installed stack version
+  stop        Stop model containers without deleting model data
+  version     Show the installed and latest stable stack versions
+  help        Show this help
+
+Update options:
+  --skip-download            Reuse existing weights without checking new pins
+  --accept-model-licenses    Confirm review of the model publishers' terms
+
+All model weights, runtime caches, and outputs remain under ./data.
+EOF
+}
+
+file_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    printf 'sha256sum or shasum is required to verify release assets.\n' >&2
+    return 1
+  fi
+}
+
+installed_version() {
+  if [[ -s "$VERSION_FILE" ]]; then
+    tr -d '[:space:]' < "$VERSION_FILE"
+  else
+    printf 'unknown'
+  fi
+}
+
+latest_version() {
+  local manifest
+  manifest="$(curl --fail --silent --show-error --location "$RELEASE_BASE_URL/version.json" 2>/dev/null || true)"
+  printf '%s' "$manifest" | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
+}
+
+validate_archive() {
+  local archive="$1"
+  local entry
+  while IFS= read -r entry; do
+    case "$entry" in
+      /*|../*|*/../*|*/..)
+        printf 'DGX bundle contains an unsafe path: %s\n' "$entry" >&2
+        return 1
+        ;;
+    esac
+  done < <(tar -tzf "$archive")
+}
+
+validate_release_tree() {
+  local release_dir="$1"
+  local path
+  for path in "${MANAGED_PATHS[@]}"; do
+    if [[ ! -e "$release_dir/$path" ]]; then
+      printf 'DGX bundle is missing required path: %s\n' "$path" >&2
+      return 1
+    fi
+  done
+  for path in sparklingkit-dgx scripts/start-dgx-models.sh scripts/start-dgx-spark.sh; do
+    if [[ ! -f "$release_dir/$path" ]]; then
+      printf 'DGX bundle is missing required executable: %s\n' "$path" >&2
+      return 1
+    fi
+  done
+}
+
+copy_tree() {
+  local source_dir="$1"
+  local destination_dir="$2"
+  local path source destination next
+  for path in "${MANAGED_PATHS[@]}"; do
+    source="$source_dir/$path"
+    destination="$destination_dir/$path"
+    mkdir -p "$(dirname "$destination")"
+    if [[ -d "$source" ]]; then
+      next="$destination.sparklingkit-next"
+      rm -rf -- "$next"
+      cp -a "$source" "$next"
+      rm -rf -- "$destination"
+      mv "$next" "$destination"
+    else
+      next="$destination.sparklingkit-next"
+      rm -rf -- "$next"
+      cp -a "$source" "$next"
+      mv -f "$next" "$destination"
+    fi
+  done
+  chmod +x "$destination_dir/sparklingkit-dgx" "$destination_dir/scripts/start-dgx-models.sh" "$destination_dir/scripts/start-dgx-spark.sh"
+}
+
+replace_path() {
+  local source="$1"
+  local destination="$2"
+  local next="$destination.sparklingkit-next"
+  mkdir -p "$(dirname "$destination")"
+  if [[ -d "$source" ]]; then
+    rm -rf -- "$next"
+    cp -a "$source" "$next"
+    rm -rf -- "$destination"
+    mv "$next" "$destination"
+  else
+    rm -rf -- "$next"
+    cp -a "$source" "$next"
+    mv -f "$next" "$destination"
+  fi
+}
+
+create_backup() {
+  local next_backup="$PROJECT_DIR/.previous-dgx-stack.next"
+  local path
+  rm -rf -- "$next_backup"
+  mkdir -p "$next_backup"
+  for path in "${MANAGED_PATHS[@]}"; do
+    if [[ -e "$PROJECT_DIR/$path" ]]; then
+      mkdir -p "$next_backup/$(dirname "$path")"
+      cp -a "$PROJECT_DIR/$path" "$next_backup/$path"
+    fi
+  done
+  rm -rf -- "$BACKUP_DIR"
+  mv "$next_backup" "$BACKUP_DIR"
+}
+
+restore_backup() {
+  local path
+  if [[ ! -d "$BACKUP_DIR" ]]; then
+    printf 'No previous DGX stack was recorded.\n' >&2
+    return 1
+  fi
+  for path in "${MANAGED_PATHS[@]}"; do
+    if [[ -e "$BACKUP_DIR/$path" ]]; then
+      replace_path "$BACKUP_DIR/$path" "$PROJECT_DIR/$path"
+    elif [[ "$path" != "sparklingkit-dgx" ]]; then
+      rm -rf -- "$PROJECT_DIR/$path"
+    fi
+  done
+  chmod +x "$PROJECT_DIR/sparklingkit-dgx" "$PROJECT_DIR/scripts/start-dgx-models.sh" "$PROJECT_DIR/scripts/start-dgx-spark.sh"
+}
+
+download_release() {
+  local temp_dir="$1"
+  local bundle="$temp_dir/sparklingkit-dgx-stack.tar.gz"
+  local checksums="$temp_dir/SHA256SUMS"
+  local expected actual
+  curl --fail --silent --show-error --location "$RELEASE_BASE_URL/sparklingkit-dgx-stack.tar.gz" --output "$bundle"
+  curl --fail --silent --show-error --location "$RELEASE_BASE_URL/SHA256SUMS" --output "$checksums"
+  expected="$(awk '$2 == "sparklingkit-dgx-stack.tar.gz" { print $1 }' "$checksums")"
+  actual="$(file_sha256 "$bundle")"
+  if [[ -z "$expected" || "$actual" != "$expected" ]]; then
+    printf 'DGX bundle checksum verification failed. No local files were replaced.\n' >&2
+    return 1
+  fi
+  validate_archive "$bundle"
+  mkdir -p "$temp_dir/release"
+  tar -xzf "$bundle" -C "$temp_dir/release"
+  validate_release_tree "$temp_dir/release"
+}
+
+run_stack() {
+  "$PROJECT_DIR/scripts/start-dgx-models.sh" "$@"
+}
+
+update_stack() {
+  local update_args=()
+  local argument temp_dir
+  for argument in "$@"; do
+    case "$argument" in
+      --skip-download|--accept-model-licenses) update_args+=("$argument") ;;
+      *) printf 'Unknown update option: %s\n' "$argument" >&2; return 2 ;;
+    esac
+  done
+  if [[ -d "$PROJECT_DIR/.git" ]]; then
+    printf 'This is a Git source checkout. Use git pull, then run ./scripts/start-dgx-models.sh --skip-download.\n' >&2
+    return 1
+  fi
+  if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    printf 'Another DGX stack update is already in progress.\n' >&2
+    return 1
+  fi
+  temp_dir="$(mktemp -d "$PROJECT_DIR/.dgx-update.XXXXXX")"
+  ACTIVE_UPDATE_TEMP="$temp_dir"
+  cleanup_update() {
+    if [[ -n "${ACTIVE_UPDATE_TEMP:-}" ]]; then rm -rf -- "$ACTIVE_UPDATE_TEMP"; fi
+    rmdir "$LOCK_DIR" 2>/dev/null || true
+  }
+  trap cleanup_update EXIT
+
+  printf 'Downloading and verifying the latest DGX stack...\n'
+  if ! download_release "$temp_dir"; then return 1; fi
+  create_backup
+  if ! copy_tree "$temp_dir/release" "$PROJECT_DIR"; then
+    printf 'Could not install the new stack files. Restoring the previous release...\n' >&2
+    restore_backup || true
+    return 1
+  fi
+
+  printf 'Rebuilding changed adapters and refreshing model service images...\n'
+  if ((${#update_args[@]})); then
+    run_arguments=(start --refresh-images "${update_args[@]}")
+  else
+    run_arguments=(start --refresh-images)
+  fi
+  if run_stack "${run_arguments[@]}"; then
+    printf 'DGX stack update complete: %s. Model data remained in %s/data.\n' "$(installed_version)" "$PROJECT_DIR"
+    return 0
+  fi
+
+  printf 'The updated stack did not become healthy. Restoring the previous release...\n' >&2
+  restore_backup
+  if run_stack start --skip-download --skip-pull --force-recreate; then
+    printf 'The previous DGX stack was restored and restarted.\n' >&2
+  else
+    printf 'The previous files were restored, but one or more services require manual recovery.\n' >&2
+  fi
+  return 1
+}
+
+rollback_stack() {
+  local current_version
+  current_version="$(installed_version)"
+  restore_backup
+  if run_stack start --skip-download --skip-pull --force-recreate; then
+    printf 'Rolled back DGX stack %s to %s. Model data was unchanged.\n' "$current_version" "$(installed_version)"
+  else
+    printf 'Previous files were restored, but one or more services require manual recovery.\n' >&2
+    return 1
+  fi
+}
+
+show_versions() {
+  local installed latest
+  installed="$(installed_version)"
+  latest="$(latest_version)"
+  printf 'Installed: %s\n' "$installed"
+  if [[ -n "$latest" ]]; then
+    printf 'Latest:    %s\n' "$latest"
+  else
+    printf 'Latest:    unavailable\n'
+  fi
+}
+
+action="${1:-help}"
+if (($#)); then shift; fi
+case "$action" in
+  start) exec "$PROJECT_DIR/scripts/start-dgx-models.sh" start "$@" ;;
+  update|upgrade) update_stack "$@" ;;
+  rollback) rollback_stack ;;
+  status) run_stack status; printf '\n'; show_versions ;;
+  stop) exec "$PROJECT_DIR/scripts/start-dgx-models.sh" stop "$@" ;;
+  version) show_versions ;;
+  help|-h|--help) usage ;;
+  *) printf 'Unknown command: %s\n\n' "$action" >&2; usage >&2; exit 2 ;;
+esac

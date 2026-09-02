@@ -17,9 +17,7 @@ bash install.sh
 Open `http://DGX-IP:54321`, select **Run models locally**, and use the model command shown there. The hosted model path is:
 
 ```bash
-curl -fsSLO https://run.sparklingkit.com/dgx/stable/install.sh
-less install.sh
-bash install.sh --accept-model-licenses
+curl -fsSL https://run.sparklingkit.com/dgx/stable/install.sh | bash -s -- --accept-model-licenses
 ```
 
 The source-based combined starter remains available for developers and contributors:
@@ -94,6 +92,37 @@ Port 54321 is present only in an all-in-one deployment. The ports and co-residen
 
 ## Operations
 
+Hosted installations include a lifecycle command in the `sparklingkit-dgx` directory:
+
+```bash
+./sparklingkit-dgx start
+./sparklingkit-dgx status
+./sparklingkit-dgx stop
+./sparklingkit-dgx version
+```
+
+To install a newer reference stack safely:
+
+```bash
+./sparklingkit-dgx update
+```
+
+The updater downloads and verifies the current release bundle before changing local files. It backs up the previous Compose files, service adapters, and lifecycle scripts; leaves `data/` and local `.env` settings untouched; rebuilds changed adapters with refreshed base layers; pulls the pinned upstream service images; recreates services one at a time; and waits for every health endpoint. If the refreshed services fail, the previous stack files are restored and restarted automatically. The manual fallback is:
+
+```bash
+./sparklingkit-dgx rollback
+```
+
+Installations created before the lifecycle command was introduced can bootstrap it with the current hosted installer:
+
+```bash
+curl -fsSL https://run.sparklingkit.com/dgx/stable/install.sh | bash -s -- --update --dir "$PWD/sparklingkit-dgx"
+```
+
+Model snapshots with unchanged pinned revisions are reused. If a later stack pins a new revision, the updater downloads it without deleting the previous snapshot. Use `./sparklingkit-dgx update --skip-download` only when you intentionally want to retain the already-installed weights.
+
+For Git source checkouts, update the repository rather than replacing tracked files:
+
 ```bash
 # Start and reuse existing models and image layers
 ./scripts/start-dgx-spark.sh
@@ -114,6 +143,7 @@ Advanced options:
 ```bash
 ./scripts/start-dgx-spark.sh --skip-download
 ./scripts/start-dgx-spark.sh --skip-build
+./scripts/start-dgx-spark.sh --refresh-images
 ```
 
 Persistent files stay beneath `data/`:
@@ -125,7 +155,7 @@ Persistent files stay beneath `data/`:
 
 Docker volumes retain Redis queue state. The stop command does not remove any persistent data.
 
-Application upgrades are managed separately from the model stack. In the directory created by the release installer, run:
+Application upgrades are managed separately from model-stack upgrades. In the workspace installation directory, run:
 
 ```bash
 ./sparklingkit update

@@ -90,6 +90,14 @@ SPARKLINGKIT_IMAGE=ghcr.io/stevibe/sparklingkit:0.2.0
 
 Change the version deliberately and run `./sparklingkit update`. Versioned Compose files attached to GitHub releases are already pinned to the matching semantic version.
 
+If the six-model reference stack was installed on a DGX Spark with the hosted model installer, update that independent layer from its own installation directory:
+
+```bash
+./sparklingkit-dgx update
+```
+
+This verifies the latest DGX bundle, rebuilds changed service adapters, refreshes pulled images, and checks every model endpoint without replacing model data. See [DGX Spark reference deployment](dgx-spark.md#operations) for rollback and legacy-installation instructions.
+
 ## Roll back the application image
 
 If the previous image is still in Docker's local cache:

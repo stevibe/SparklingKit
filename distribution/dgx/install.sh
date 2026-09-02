@@ -4,6 +4,7 @@ set -euo pipefail
 INSTALL_DIR="${SPARKLINGKIT_DGX_DIR:-$PWD/sparklingkit-dgx}"
 RELEASE_BASE_URL="${SPARKLINGKIT_DGX_RELEASE_URL:-https://run.sparklingkit.com/dgx/stable}"
 PASSTHROUGH=()
+UPDATE_EXISTING=false
 
 usage() {
   cat <<'EOF'
@@ -14,6 +15,7 @@ services. The application itself is not installed on this machine.
 
 Installer options:
   --dir PATH                 Installation directory (default: ./sparklingkit-dgx)
+  --update                   Upgrade an existing hosted installation in place
   -h, --help                 Show this help
 
 Model-stack options are passed through, including:
@@ -29,6 +31,9 @@ while (($#)); do
       if (($# < 2)); then printf '%s requires a path.\n' "$1" >&2; exit 2; fi
       INSTALL_DIR="$2"
       shift
+      ;;
+    --update)
+      UPDATE_EXISTING=true
       ;;
     -h|--help)
       usage
@@ -52,14 +57,41 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ -e "$INSTALL_DIR/scripts/start-dgx-models.sh" ]]; then
-  printf 'A DGX stack already exists at %s. Run its start script directly.\n' "$INSTALL_DIR" >&2
-  exit 1
-fi
-
 mkdir -p "$INSTALL_DIR"
 temp_dir="$(mktemp -d)"
 trap 'rm -rf "$temp_dir"' EXIT
+
+if [[ -e "$INSTALL_DIR/scripts/start-dgx-models.sh" ]]; then
+  if [[ "$UPDATE_EXISTING" != "true" ]]; then
+    if [[ -x "$INSTALL_DIR/sparklingkit-dgx" ]]; then
+      printf 'A DGX stack already exists at %s. Run ./sparklingkit-dgx update there.\n' "$INSTALL_DIR" >&2
+    else
+      printf 'A legacy DGX stack exists at %s. Re-run this installer with --update to add the updater and refresh it safely.\n' "$INSTALL_DIR" >&2
+    fi
+    exit 1
+  fi
+
+  printf 'Bootstrapping the verified DGX stack updater...\n'
+  curl --fail --silent --show-error --location "$RELEASE_BASE_URL/sparklingkit-dgx" --output "$temp_dir/sparklingkit-dgx"
+  curl --fail --silent --show-error --location "$RELEASE_BASE_URL/SHA256SUMS" --output "$temp_dir/SHA256SUMS"
+  expected_manager="$(awk '$2 == "sparklingkit-dgx" { print $1 }' "$temp_dir/SHA256SUMS")"
+  actual_manager="$(sha256sum "$temp_dir/sparklingkit-dgx" | awk '{print $1}')"
+  if [[ -z "$expected_manager" || "$actual_manager" != "$expected_manager" ]]; then
+    printf 'DGX updater checksum verification failed. No local files were replaced.\n' >&2
+    exit 1
+  fi
+  chmod +x "$temp_dir/sparklingkit-dgx"
+  mv "$temp_dir/sparklingkit-dgx" "$INSTALL_DIR/.sparklingkit-dgx-next"
+  mv "$INSTALL_DIR/.sparklingkit-dgx-next" "$INSTALL_DIR/sparklingkit-dgx"
+  rm -rf "$temp_dir"
+  trap - EXIT
+  cd "$INSTALL_DIR"
+  if ((${#PASSTHROUGH[@]})); then
+    exec ./sparklingkit-dgx update "${PASSTHROUGH[@]}"
+  else
+    exec ./sparklingkit-dgx update
+  fi
+fi
 
 printf 'Downloading the SparklingKit DGX model stack...\n'
 curl --fail --silent --show-error --location \
@@ -81,6 +113,12 @@ if [[ "$actual" != "$expected" ]]; then
 fi
 
 tar -xzf "$temp_dir/sparklingkit-dgx-stack.tar.gz" -C "$INSTALL_DIR"
-chmod +x "$INSTALL_DIR/scripts/start-dgx-models.sh" "$INSTALL_DIR/scripts/start-dgx-spark.sh"
+chmod +x "$INSTALL_DIR/sparklingkit-dgx" "$INSTALL_DIR/scripts/start-dgx-models.sh" "$INSTALL_DIR/scripts/start-dgx-spark.sh"
+rm -rf "$temp_dir"
+trap - EXIT
 cd "$INSTALL_DIR"
-exec ./scripts/start-dgx-models.sh "${PASSTHROUGH[@]}"
+if ((${#PASSTHROUGH[@]})); then
+  exec ./sparklingkit-dgx start "${PASSTHROUGH[@]}"
+else
+  exec ./sparklingkit-dgx start
+fi

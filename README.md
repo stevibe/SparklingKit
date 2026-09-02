@@ -76,6 +76,8 @@ On the first visit, choose one of three tabs:
 
 Choose this when SparklingKit and the six models run on the same DGX Spark. Onboarding provides both the hosted, checksum-verified installer and the GitHub-source command, then verifies all six services through Docker's host gateway before applying anything.
 
+Hosted model-stack installations include `./sparklingkit-dgx update`. It verifies the latest bundle, preserves the model and runtime data under `data/`, rebuilds changed service adapters, refreshes pulled images, checks every endpoint, and restores the previous stack release if startup fails. Application updates remain independent through `./sparklingkit update` in the workspace installation directory.
+
 ### Run models remotely
 
 Choose this when the model stack runs on another DGX Spark. Run the same model installer on the DGX, enter its trusted-network hostname or IP in onboarding, and verify ports 8331–8336. The optional monitor uses port 8330. Keep these ports behind a firewall, LAN, or VPN.
