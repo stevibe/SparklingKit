@@ -4,6 +4,7 @@ import { AudioLines, BrainCircuit, GitBranch, Image as ImageIcon, LayoutGrid, La
 import { api } from "../api";
 import { settingsUpdatedEvent } from "../settings-events";
 import type { Health, ModuleDescriptor, Settings as AppSettings, SparkStatus } from "../types";
+import { displayVersion, isNewerVersion, latestRelease, type ReleaseManifest } from "../version";
 import { useGlobalSearch } from "./GlobalSearch";
 
 const moduleIcons = { "scan-text": ScanText, "audio-lines": AudioLines, languages: Languages, "scan-search": ScanSearch, image: ImageIcon, network: Network, "message-circle": MessageCircle };
@@ -28,11 +29,20 @@ function gibibytes(bytes: number) {
   return `${(bytes / 2 ** 30).toFixed(1)} GiB`;
 }
 
+function ProductFooter({ currentVersion, latest }: { currentVersion?: string; latest?: ReleaseManifest }) {
+  const updateAvailable = isNewerVersion(currentVersion, latest?.version);
+  return <footer className="product-footer">
+    <div className="product-footer-links"><a href="https://sparklingkit.com" target="_blank" rel="noreferrer">sparklingkit.com</a><i /><a href="https://github.com/stevibe/SparklingKit" target="_blank" rel="noreferrer">GitHub</a></div>
+    <div className="product-footer-version" aria-live="polite"><span>{displayVersion(currentVersion)}</span>{updateAvailable && <a href="https://github.com/stevibe/SparklingKit/blob/main/docs/deployment.md#upgrade" target="_blank" rel="noreferrer" title={`${displayVersion(latest?.version)} is available. Open the upgrade guide.`}>Update available</a>}</div>
+  </footer>;
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const [health, setHealth] = useState<Health>();
   const [sparkStatus, setSparkStatus] = useState<SparkStatus>();
   const [systemStatusBaseUrl, setSystemStatusBaseUrl] = useState<string>();
   const [modules, setModules] = useState<ModuleDescriptor[]>([]);
+  const [latest, setLatest] = useState<ReleaseManifest>();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try { return window.localStorage.getItem(sidebarPreferenceKey) === "true"; } catch { return false; }
   });
@@ -71,6 +81,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => { active = false; window.clearInterval(timer); };
   }, [systemStatusBaseUrl]);
   useEffect(() => { api.modules().then(setModules).catch(() => setModules([])); }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    latestRelease(controller.signal).then(setLatest).catch(() => undefined);
+    return () => controller.abort();
+  }, []);
   const enabled = health ? Object.values(health.endpoints).filter((item) => item.enabled) : [];
   const healthy = enabled.filter((item) => item.ok).length;
   const serviceSummary = health ? `${healthy}/${enabled.length} online` : "Checking";
@@ -132,9 +147,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               })}
             </div>
           </div>
+          <ProductFooter currentVersion={health?.version} latest={latest} />
         </div>
       </aside>
-      <main className="main-content">{children}</main>
+      <main className="main-content">{children}<div className="mobile-product-footer"><ProductFooter currentVersion={health?.version} latest={latest} /></div></main>
       <nav className="mobile-tabbar" aria-label="Primary navigation">
         {mobileNav.slice(0, 2).map(({ to, label, icon: Icon, exact }) => <NavLink key={to} to={to} end={exact} className={({ isActive }) => isActive ? "active" : ""}><Icon size={20} strokeWidth={1.9} /><span>{label}</span></NavLink>)}
         <button type="button" onClick={() => openSearch()} aria-label="Search"><Search size={20} strokeWidth={1.9} /><span>Search</span></button>

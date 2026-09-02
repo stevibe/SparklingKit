@@ -77,6 +77,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .spark-monitor-foot { @apply mt-2 text-[10px] font-semibold text-muted; }
 .spark-monitor > small { @apply mt-2 block text-[11px] text-muted; }
 .main-content { @apply min-h-screen transition-[margin] duration-200 md:ml-[260px]; }
+.product-footer { @apply mt-3 border-t border-[#272c33] px-2 pt-3 text-[11px] leading-4 text-muted; }
+.product-footer-links, .product-footer-version { @apply flex items-center gap-2; }
+.product-footer-links a { @apply transition hover:text-ink; }
+.product-footer-links i { @apply h-0.5 w-0.5 rounded-full bg-[#59616c]; }
+.product-footer-version { @apply mt-1.5 justify-between; }
+.product-footer-version > span { @apply font-mono; }
+.product-footer-version > a { @apply rounded-full border border-[#315f4d] bg-[#173126] px-2 py-0.5 font-semibold text-[#72d9a4] transition hover:border-[#47866b] hover:bg-[#1c3b2e]; }
+.mobile-product-footer { @apply px-5 py-7 md:hidden; }
+.mobile-product-footer .product-footer { @apply mx-auto mt-0 max-w-xl px-0 text-center; }
+.mobile-product-footer .product-footer-links, .mobile-product-footer .product-footer-version { @apply justify-center; }
 
 @media (min-width: 768px) {
   .sidebar-collapsed .sidebar { @apply w-20 px-3; }
@@ -89,6 +99,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .sidebar-collapsed .settings-nav-link { @apply mt-3; }
   .sidebar-collapsed .service-monitor { @apply px-0; }
   .sidebar-collapsed .spark-monitor { @apply hidden; }
+  .sidebar-collapsed .product-footer { @apply hidden; }
   .sidebar-collapsed .service-list { @apply gap-1; }
   .sidebar-collapsed .service-row { @apply relative justify-center px-0; }
   .sidebar-collapsed .service-state { @apply absolute right-1.5 bottom-1.5; }
@@ -1479,6 +1490,7 @@ body { background: radial-gradient(circle at 72% -15%, rgba(53, 82, 125, .16), t
   .main-content { min-height: calc(100dvh - 4.25rem); padding-bottom: calc(4.5rem + env(safe-area-inset-bottom)); }
   .active-chat-shell .mobile-header { @apply hidden; }
   .active-chat-shell .main-content { height: calc(100dvh - 4.5rem - env(safe-area-inset-bottom)); min-height: 0; padding-bottom: 0; }
+  .active-chat-shell .mobile-product-footer { @apply hidden; }
   .page-wrap { @apply px-4 py-6; }
 
   .workflow-library-page { @apply px-4 py-6; }

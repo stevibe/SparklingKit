@@ -73,6 +73,8 @@ jobs:
           cp distribution/run-site/index.html distribution/run-site/CNAME run-site/
           cp release-assets/install.sh release-assets/compose.yaml release-assets/sparklingkit release-assets/SHA256SUMS run-site/stable/
           cp release-assets/install.sh release-assets/compose.yaml release-assets/sparklingkit release-assets/SHA256SUMS "run-site/v${version}/"
+          printf '{"version":"%s"}\n' "$version" > run-site/stable/version.json
+          cp run-site/stable/version.json "run-site/v${version}/version.json"
           cp release-assets/dgx-install.sh run-site/dgx/stable/install.sh
           cp release-assets/sparklingkit-dgx-stack.tar.gz release-assets/SHA256SUMS run-site/dgx/stable/
           cp release-assets/dgx-install.sh "run-site/dgx/v${version}/install.sh"
