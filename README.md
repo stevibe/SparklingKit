@@ -56,9 +56,7 @@ Keeping that boundary explicit supports three practical setups without maintaini
 The recommended distribution is a prebuilt multi-platform container with a small Docker Compose bundle. It runs SparklingKit and Redis together; model weights are never included in the application image.
 
 ```bash
-curl -fsSLO https://run.sparklingkit.com/stable/install.sh
-less install.sh
-bash install.sh
+curl -fsSL https://run.sparklingkit.com/stable/install.sh -o install.sh && bash install.sh
 ```
 
 Open `http://localhost:54321`, or `http://SERVER-IP:54321` from another device on the trusted network. The installation directory is deliberately portable:
