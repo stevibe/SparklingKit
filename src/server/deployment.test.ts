@@ -22,7 +22,8 @@ describe("DGX Spark model images", () => {
       fs.readFile(new URL("../../distribution/dgx/sparklingkit-dgx", import.meta.url), "utf8"),
     ]);
 
-    expect(releaseWorkflow).toContain("release-assets/dgx-stack/sparklingkit-dgx");
+    expect(releaseWorkflow).toContain("release-staging/dgx-stack/sparklingkit-dgx");
+    expect(releaseWorkflow).not.toContain("release-assets/dgx-stack/");
     expect(releaseWorkflow).toContain("dgx-install.sh sparklingkit-dgx sparklingkit-dgx-stack.tar.gz");
     expect(runSiteWorkflow).toContain("run-site/dgx/stable/version.json");
     expect(runSiteWorkflow).toContain("release-assets/sparklingkit-dgx release-assets/sparklingkit-dgx-stack.tar.gz");

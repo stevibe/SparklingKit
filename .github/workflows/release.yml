@@ -108,19 +108,18 @@ jobs:
         run: |
           set -euo pipefail
           release_version="${RELEASE_TAG#v}"
-          mkdir -p release-assets
+          mkdir -p release-assets release-staging/dgx-stack/scripts release-staging/dgx-stack/services
           sed "s#ghcr.io/stevibe/sparklingkit:latest#ghcr.io/stevibe/sparklingkit:${release_version}#" distribution/compose.yaml > release-assets/compose.yaml
           cp distribution/sparklingkit release-assets/sparklingkit
           cp distribution/install.sh release-assets/install.sh
           cp distribution/dgx/install.sh release-assets/dgx-install.sh
           cp distribution/dgx/sparklingkit-dgx release-assets/sparklingkit-dgx
-          mkdir -p release-assets/dgx-stack/scripts release-assets/dgx-stack/services
-          cp compose.yaml compose.spark.yaml compose.dgx.yaml LICENSE release-assets/dgx-stack/
-          cp scripts/start-dgx-models.sh scripts/start-dgx-spark.sh release-assets/dgx-stack/scripts/
-          cp -R services/dgx-models services/dgx-status release-assets/dgx-stack/services/
-          cp distribution/dgx/sparklingkit-dgx release-assets/dgx-stack/sparklingkit-dgx
-          printf '%s\n' "$release_version" > release-assets/dgx-stack/.sparklingkit-dgx-version
-          tar -czf release-assets/sparklingkit-dgx-stack.tar.gz -C release-assets/dgx-stack .
+          cp compose.yaml compose.spark.yaml compose.dgx.yaml LICENSE release-staging/dgx-stack/
+          cp scripts/start-dgx-models.sh scripts/start-dgx-spark.sh release-staging/dgx-stack/scripts/
+          cp -R services/dgx-models services/dgx-status release-staging/dgx-stack/services/
+          cp distribution/dgx/sparklingkit-dgx release-staging/dgx-stack/sparklingkit-dgx
+          printf '%s\n' "$release_version" > release-staging/dgx-stack/.sparklingkit-dgx-version
+          tar -czf release-assets/sparklingkit-dgx-stack.tar.gz -C release-staging/dgx-stack .
           cd release-assets
           sha256sum compose.yaml sparklingkit install.sh dgx-install.sh sparklingkit-dgx sparklingkit-dgx-stack.tar.gz > SHA256SUMS
 
