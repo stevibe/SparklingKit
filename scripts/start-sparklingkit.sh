@@ -19,7 +19,7 @@ Options:
   -h, --help         Show this help
 
 Examples:
-  ./scripts/start-sparklingkit.sh --model-host 192.0.2.10
+  ./scripts/start-sparklingkit.sh --model-host dgx-spark.local
   ./scripts/start-sparklingkit.sh --configure-later
 EOF
 }

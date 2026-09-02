@@ -65,22 +65,22 @@ export async function initializeData() {
 function migrateBundledServiceDefaults(saved: Partial<Settings>) {
   if (!saved.endpoints) saved.endpoints = {} as Settings["endpoints"];
   let changed = false;
-  const move = (kind: keyof Settings["endpoints"], previousBaseUrls: string[], provisionIfEmpty = false) => {
+  const move = (kind: keyof Settings["endpoints"], provisionIfEmpty = false) => {
     const current = saved.endpoints?.[kind];
     const replacement = defaultSettings.endpoints[kind];
     if (!replacement.baseUrl) return;
     const isEmpty = !current?.baseUrl && !current?.model;
-    if (!current || previousBaseUrls.includes(current.baseUrl) || (provisionIfEmpty && isEmpty)) {
+    if (!current || (provisionIfEmpty && isEmpty)) {
       saved.endpoints![kind] = { ...replacement, apiKey: "" };
       changed = true;
     }
   };
-  move("llm", ["http://192.0.2.10:8000/v1", "http://192.0.2.10:8330/v1"]);
-  move("ocr", ["http://192.0.2.10:8222/v1", "http://192.0.2.10:8331/v1"]);
-  move("stt", ["http://192.0.2.10:8332/v1"]);
-  move("translation", ["http://192.0.2.10:8333/v1", "http://192.0.2.10:8444/v1", "http://192.0.2.10:8444"], true);
-  move("grounding", ["http://192.0.2.10:8334/v1", "http://192.0.2.10:8555/v1", "http://192.0.2.10:8555"], true);
-  move("image-generation", ["http://192.0.2.10:8335/v1", "http://192.0.2.10:8666/v1", "http://192.0.2.10:8666"], true);
+  move("llm");
+  move("ocr");
+  move("stt");
+  move("translation", true);
+  move("grounding", true);
+  move("image-generation", true);
   return changed;
 }
 

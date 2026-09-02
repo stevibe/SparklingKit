@@ -224,7 +224,7 @@ export function SettingsPage() {
             <div className="settings-section-block"><h3>Connection</h3><div className="settings-group">
               <div className="settings-service-enable-row"><div className="settings-group-identity"><span className={systemStatusMeta.tint}><Activity size={18} /></span><div><h3>Sidebar status</h3><p>Show live machine and accelerator information.</p></div></div><div className="settings-group-actions"><span className={cn("status-badge", settings.systemStatus.baseUrl ? "status-done" : "status-idle")}>{settings.systemStatus.baseUrl ? "Visible" : "Hidden"}</span></div></div>
               <div className="settings-control-grid">
-                <label className="field-label settings-control-full">Base URL <span className="font-normal text-muted">(optional)</span><input className="input mt-2" value={settings.systemStatus.baseUrl} placeholder="http://192.0.2.10:8330" onChange={(event) => setSettings({ ...settings, systemStatus: { baseUrl: event.target.value } })} /></label>
+                <label className="field-label settings-control-full">Base URL <span className="font-normal text-muted">(optional)</span><input className="input mt-2" value={settings.systemStatus.baseUrl} placeholder="http://dgx-spark.local:8330" onChange={(event) => setSettings({ ...settings, systemStatus: { baseUrl: event.target.value } })} /></label>
               </div>
             </div><p className="settings-footnote">SparklingKit reads <strong>/v1/status</strong> from this service. Clear the URL and save to hide the machine-status block from the sidebar.</p></div>
           </section>}

@@ -34,6 +34,18 @@ jobs:
           npm run typecheck
           npm test
 
+      - name: Verify release version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          release_version="${RELEASE_TAG#v}"
+          package_version="$(node --print "require('./package.json').version")"
+          if [[ "$release_version" != "$package_version" ]]; then
+            printf 'Release tag %s does not match package.json version %s.\n' "$RELEASE_TAG" "$package_version" >&2
+            exit 1
+          fi
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
 
@@ -52,10 +64,11 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=auto
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
           labels: |
             org.opencontainers.image.title=SparklingKit
             org.opencontainers.image.description=Local-first, file-oriented AI workspace
@@ -110,8 +123,15 @@ jobs:
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRERELEASE: ${{ contains(github.ref_name, '-') }}
         run: |
+          set -euo pipefail
+          release_flags=()
+          if [[ "$PRERELEASE" == "true" ]]; then
+            release_flags+=(--prerelease)
+          fi
           gh release create "${GITHUB_REF_NAME}" release-assets/* \
             --verify-tag \
+            "${release_flags[@]}" \
             --generate-notes \
             --title "SparklingKit ${GITHUB_REF_NAME#v}"
