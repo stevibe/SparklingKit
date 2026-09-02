@@ -247,7 +247,7 @@ textarea.input { @apply text-[16px]; resize: vertical; }
 
 /* Job explorer */
 .job-page { @apply flex min-h-screen flex-col px-4 pb-4 sm:px-6 sm:pb-5 lg:px-8; }
-.job-titlebar { @apply sticky top-0 z-20 mb-4 flex min-h-16 items-center justify-between gap-5 bg-canvas/95 py-4 backdrop-blur; }
+.job-titlebar { @apply sticky top-0 z-20 flex min-h-16 items-center justify-between gap-5 bg-canvas/95 py-4 backdrop-blur; }
 .job-title-left { @apply flex min-w-0 items-center gap-3; }
 .job-title-line { @apply flex min-w-0 items-center gap-1.5; }
 .inline-rename-button { @apply flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted opacity-55 transition hover:bg-[#e9eef6] hover:text-ink hover:opacity-100; }
