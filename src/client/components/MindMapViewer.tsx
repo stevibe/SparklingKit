@@ -25,6 +25,15 @@ type MindMapCanvasNode = Node<{
   onToggle: (id: string) => void;
 }, "mindmap">;
 
+const ROOT_NODE_WIDTH = 270;
+const BRANCH_NODE_WIDTH = 250;
+const EDGE_ROUTING_GAP = 96;
+
+export function mindMapColumnX(depth: number) {
+  if (depth <= 0) return 0;
+  return ROOT_NODE_WIDTH + EDGE_ROUTING_GAP + (depth - 1) * (BRANCH_NODE_WIDTH + EDGE_ROUTING_GAP);
+}
+
 function isTreeNode(value: unknown): value is MindMapTreeNode {
   if (!value || typeof value !== "object") return false;
   const node = value as Record<string, unknown>;
@@ -73,7 +82,7 @@ export function layoutMindMap(document: MindMapDocument, collapsed: ReadonlySet<
     nodes.push({
       id: item.id,
       type: "mindmap",
-      position: { x: depth * 310, y },
+      position: { x: mindMapColumnX(depth), y },
       data: { item, depth, collapsed: collapsed.has(item.id), hasChildren: item.children.length > 0, onToggle },
       draggable: false,
       selectable: true,
