@@ -180,7 +180,7 @@
         display: flex;
         align-items: center;
         min-height: 900px;
-        padding: 142px 0 64px;
+        padding: 176px 0 64px;
       }
       .hero-grid {
         display: block;
@@ -753,13 +753,25 @@
         .section { padding: 82px 0; }
         .header-inner { min-height: 68px; }
         .header-github { min-height: 38px; padding: 0 12px; font-size: 12px; }
-        .hero { min-height: 0; padding: 110px 0 56px; }
+        .hero { min-height: 0; padding: 138px 0 56px; }
         .hero-copy h1 { font-size: clamp(3rem, 11vw, 3.75rem); }
         .hero-description { font-size: 16px; }
         .hero-actions a { flex: 1; }
         .gallery-section { padding-top: 18px; }
-        .gallery-grid { grid-template-columns: 1fr; grid-template-rows: none; gap: 10px; }
-        .gallery-item { aspect-ratio: 1.45; border-radius: 14px; }
+        .gallery-grid {
+          grid-template-columns: none;
+          grid-auto-columns: calc(66.6667% - 6.6667px);
+          grid-auto-flow: column;
+          gap: 10px;
+          padding-bottom: 6px;
+          overflow-x: auto;
+          overscroll-behavior-x: contain;
+          scroll-snap-type: x mandatory;
+          scrollbar-width: none;
+          -webkit-overflow-scrolling: touch;
+        }
+        .gallery-grid::-webkit-scrollbar { display: none; }
+        .gallery-item { aspect-ratio: 1.45; border-radius: 14px; scroll-snap-align: start; }
         .gallery-zoom { right: 10px; bottom: 10px; }
         .install-window { margin-top: 42px; }
         .install-head { padding: 0 18px; }
@@ -778,7 +790,8 @@
         .workflow-steps { grid-template-columns: 1fr; gap: 8px; }
         .wf-arrow { transform: rotate(90deg); }
         .workflow-run-note { align-items: flex-start; flex-direction: column; gap: 7px; }
-        .workflow-catalog { grid-template-columns: 1fr; }
+        .workflow-catalog { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; }
+        .workflow-catalog strong, .workflow-catalog ul { font-size: 12px; }
         .folder-tree { overflow-x: auto; padding: 19px; }
         .folder-tree > div { min-width: 480px; }
         .model-table { grid-template-columns: 1fr; }
