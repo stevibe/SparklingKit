@@ -26,6 +26,7 @@ describe("DGX Spark model images", () => {
     expect(releaseWorkflow).toContain("dgx-install.sh sparklingkit-dgx sparklingkit-dgx-stack.tar.gz");
     expect(runSiteWorkflow).toContain("run-site/dgx/stable/version.json");
     expect(runSiteWorkflow).toContain("release-assets/sparklingkit-dgx release-assets/sparklingkit-dgx-stack.tar.gz");
+    expect(runSiteWorkflow).not.toContain("- .github/workflows/publish-run-site.yml");
     expect(installer).toContain("exec ./sparklingkit-dgx update");
     expect(manager).toContain("run_arguments=(start --refresh-images");
   });

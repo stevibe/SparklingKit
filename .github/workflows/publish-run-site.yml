@@ -6,7 +6,6 @@ on:
       - main
     paths:
       - distribution/run-site/**
-      - .github/workflows/publish-run-site.yml
   workflow_dispatch:
     inputs:
       release_tag:
