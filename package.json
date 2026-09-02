@@ -1,6 +1,6 @@
 {
   "name": "sparklingkit",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A local-first, file-oriented AI workspace for modular inference services and reusable workflows.",
   "private": true,
   "license": "Apache-2.0",
