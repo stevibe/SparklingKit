@@ -1,9 +1,35 @@
 import { describe, expect, it } from "vitest";
-import { extractHtml, flowNodeHistoryLabel, getFileKind, htmlDocument, linkedChatsForJob, markdownForPreview } from "./JobPage";
+import { extractHtml, flowNodeHistoryLabel, getFileKind, htmlDocument, linkedChatsForJob, markdownForPreview, preferredOutputFile } from "./JobPage";
 import type { FlowNodeRun } from "../../shared/contracts";
-import type { Chat } from "../types";
+import type { Chat, Job } from "../types";
 
 describe("job output preview", () => {
+  it("opens the primary generated result instead of the source file", () => {
+    const job = {
+      outputFiles: ["details.json", "document.md"],
+      artifacts: [
+        { role: "source", path: "input/source.pdf" },
+        { role: "supplementary", path: "output/details.json" },
+        { role: "primary", path: "output/document.md" },
+      ],
+    } as Job;
+
+    expect(preferredOutputFile(job)).toBe("document.md");
+  });
+
+  it("opens the first newly generated result when a later run finishes", () => {
+    const job = {
+      outputFiles: ["document.md", "mindmap.json", "mindmap-outline.md"],
+      artifacts: [
+        { role: "primary", path: "output/document.md" },
+        { role: "supplementary", path: "output/mindmap.json" },
+        { role: "supplementary", path: "output/mindmap-outline.md" },
+      ],
+    } as Job;
+
+    expect(preferredOutputFile(job, ["mindmap.json", "mindmap-outline.md"])).toBe("mindmap.json");
+  });
+
   it("detects a complete HTML document inside a Markdown output", () => {
     expect(extractHtml("<!doctype html><html><body><h1>Receipt</h1></body></html>", "document.md")).toContain("<h1>Receipt</h1>");
   });

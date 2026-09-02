@@ -50,6 +50,7 @@ export function JobPage() {
   const [startingWorkflowId, setStartingWorkflowId] = useState("");
   const [linkedChats, setLinkedChats] = useState<Chat[]>([]);
   const [flowRun, setFlowRun] = useState<FlowRun>();
+  const observedOutputFiles = useRef<{ jobId: string; files: string[] }>({ jobId: "", files: [] });
   const navigate = useNavigate();
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -89,6 +90,9 @@ export function JobPage() {
   const outputFiles = useMemo(() => job?.outputFiles || [], [job?.outputFiles]);
   useEffect(() => {
     if (!job) return;
+    const previousOutputFiles = observedOutputFiles.current.jobId === job.id ? observedOutputFiles.current.files : [];
+    const newOutputFiles = outputFiles.filter((file) => !previousOutputFiles.includes(file));
+    observedOutputFiles.current = { jobId: job.id, files: outputFiles };
     const requestedArtifact = requestedArtifactId ? job.artifacts.find((artifact) => artifact.id === requestedArtifactId) : undefined;
     if (requestedArtifact?.path.startsWith("output/")) {
       setSelectedScope("output");
@@ -100,12 +104,19 @@ export function JobPage() {
       setSelectedFile(requestedArtifact.path.slice("input/".length));
       return;
     }
+    const newOutput = preferredOutputFile(job, newOutputFiles);
+    if (newOutput) {
+      setSelectedScope("output");
+      setSelectedFile(newOutput);
+      return;
+    }
     const selectionExists = selectedScope === "output" ? outputFiles.includes(selectedFile) : job.inputs.some((input) => input.storedName === selectedFile);
     if (selectionExists) return;
-    if (outputFiles.length) { setSelectedScope("output"); setSelectedFile(outputFiles[0]); }
+    const preferredOutput = preferredOutputFile(job);
+    if (preferredOutput) { setSelectedScope("output"); setSelectedFile(preferredOutput); }
     else if (job.inputs.length) { setSelectedScope("input"); setSelectedFile(job.inputs[0].storedName); }
     else setSelectedFile("");
-  }, [job?.inputs.map((input) => input.storedName).join("|"), outputFiles.join("|"), requestedArtifactId]);
+  }, [job?.id, job?.inputs.map((input) => input.storedName).join("|"), outputFiles.join("|"), requestedArtifactId]);
   useEffect(() => {
     if (!selectedFile) return;
     let active = true;
@@ -330,6 +341,15 @@ export function JobPage() {
 
 export function linkedChatsForJob(chats: Chat[], jobId: string) {
   return chats.filter((chat) => chat.linkedJobId === jobId);
+}
+
+export function preferredOutputFile(job: Pick<Job, "artifacts" | "outputFiles">, candidates = job.outputFiles) {
+  const available = new Set(candidates);
+  const primary = job.artifacts.find((artifact) => {
+    if (artifact.role !== "primary" || !artifact.path.startsWith("output/")) return false;
+    return available.has(artifact.path.slice("output/".length));
+  });
+  return primary?.path.slice("output/".length) || candidates[0] || "";
 }
 
 function FlowActionIcon({ moduleId }: { moduleId: ModuleId }) {
