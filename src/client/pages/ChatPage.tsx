@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowRight, ArrowUp, Bot, Check, ChevronLeft, Copy, MessageCircle, Paperclip, Pencil, Plus, Search, Square, Trash2, UserRound } from "lucide-react";
 import { api, streamChat } from "../api";
+import { createClientId } from "../client-id";
 import { writeClipboardText } from "../clipboard";
 import { cn, ConfirmDialog, RenameDialog, timeAgo } from "../components/ui";
 import { MarkdownRenderer } from "../components/MarkdownRenderer";
@@ -136,7 +137,7 @@ export function ChatPage() {
       setChat(current);
       navigate(`/chat/${current.id}`, { replace: true });
     }
-    const optimistic: ChatMessage = { id: crypto.randomUUID(), role: "user", content, createdAt: new Date().toISOString() };
+    const optimistic: ChatMessage = { id: createClientId(), role: "user", content, createdAt: new Date().toISOString() };
     setChat({ ...current, messages: [...current.messages, optimistic] });
     setInput("");
     setDraft("");
