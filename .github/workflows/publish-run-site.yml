@@ -41,7 +41,7 @@ jobs:
           set -euo pipefail
           version="${RELEASE_TAG#v}"
           mkdir -p run-site/stable run-site/dgx/stable "run-site/v${version}" "run-site/dgx/v${version}"
-          cp distribution/site/index.html distribution/site/CNAME run-site/
+          cp distribution/run-site/index.html distribution/run-site/CNAME run-site/
           cp release-assets/install.sh release-assets/compose.yaml release-assets/sparklingkit release-assets/SHA256SUMS run-site/stable/
           cp release-assets/install.sh release-assets/compose.yaml release-assets/sparklingkit release-assets/SHA256SUMS "run-site/v${version}/"
           cp release-assets/dgx-install.sh run-site/dgx/stable/install.sh
